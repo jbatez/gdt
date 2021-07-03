@@ -8,6 +8,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <utility>
 
 namespace gdt_detail
 {
@@ -57,26 +58,51 @@ namespace gdt
         {}
 
         // Constructor.
-        explicit constexpr vector(size_type n, const Allocator& = Allocator());
+        explicit constexpr vector(size_type n, const Allocator& m = Allocator())
+        :
+            vector(m)
+        {
+            resize(n);
+        }
 
         // Constructor.
         constexpr vector(
             size_type n,
             const T& value,
-            const Allocator& = Allocator());
+            const Allocator& m = Allocator())
+        :
+            vector(m)
+        {
+            assign(n, value);
+        }
 
         // Constructor.
         template<typename InputIterator>
         constexpr vector(
             InputIterator first,
             InputIterator last,
-            const Allocator& = Allocator());
+            const Allocator& m = Allocator())
+        :
+            vector(m)
+        {
+            assign(first, last);
+        }
 
         // Constructor.
-        constexpr vector(const vector& x);
+        constexpr vector(const vector& x)
+        :
+            vector(x, std::allocator_traits<Allocator>::
+                select_on_container_copy_construction(x.get_allocator()))
+        {}
 
         // Constructor.
-        constexpr vector(vector&&) noexcept;
+        constexpr vector(vector&& x) noexcept
+        :
+            _allocator{std::move(x._allocator)},
+            _ptr{std::exchange(x._ptr, nullptr)},
+            _size{std::exchange(x._size, 0)},
+            _capacity{std::exchange(x._capacity)}
+        {}
 
         // Constructor.
         constexpr vector(const vector&, const Allocator&);
@@ -85,7 +111,14 @@ namespace gdt
         constexpr vector(vector&&, const Allocator&);
 
         // Constructor.
-        constexpr vector(std::initializer_list<T>, const Allocator& = Allocator());
+        constexpr vector(
+            std::initializer_list<T> il,
+            const Allocator& m = Allocator())
+        :
+            vector(m)
+        {
+            assign(il);
+        }
 
         // Destructor.
         constexpr ~vector()
@@ -101,11 +134,17 @@ namespace gdt
         // Assignment.
         constexpr vector& operator=(vector&& x)
         noexcept(
-            std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
-            std::allocator_traits<Allocator>::is_always_equal::value);
+            std::allocator_traits<Allocator>::
+                propagate_on_container_move_assignment::value ||
+            std::allocator_traits<Allocator>::
+                is_always_equal::value);
 
         // Assignment.
-        constexpr vector& operator=(std::initializer_list<T>);
+        constexpr vector& operator=(std::initializer_list<T> il)
+        {
+            assign(il);
+            return *this;
+        }
 
         // Assign.
         template<typename InputIterator>
@@ -115,7 +154,10 @@ namespace gdt
         constexpr void assign(size_type n, const T& u);
 
         // Assign.
-        constexpr void assign(std::initializer_list<T>);
+        constexpr void assign(std::initializer_list<T> il)
+        {
+            assign(il.begin(), il.end());
+        }
 
         // Get allocator.
         constexpr allocator_type get_allocator() const noexcept
@@ -220,10 +262,24 @@ namespace gdt
         }
 
         // Resize.
-        constexpr void resize(size_type sz);
+        constexpr void resize(size_type sz)
+        {
+            _reserve_or_shrink(sz);
+            while (_size < sz)
+            {
+                emplace_back();
+            }
+        }
 
         // Resize.
-        constexpr void resize(size_type sz, const T& c);
+        constexpr void resize(size_type sz, const T& c)
+        {
+            _reserve_or_shrink(sz);
+            while (_size < sz)
+            {
+                push_back(c);
+            }
+        }
 
         // Reserve.
         constexpr void reserve(size_type n);
@@ -304,10 +360,16 @@ namespace gdt
         constexpr reference emplace_back(Args&&... args);
 
         // Push back.
-        constexpr void push_back(const T& x);
+        constexpr void push_back(const T& x)
+        {
+            emplace_back(x);
+        }
 
         // Push back.
-        constexpr void push_back(T&& x);
+        constexpr void push_back(T&& x)
+        {
+            emplace_back(std::move(x));
+        }
 
         // Pop back.
         constexpr void pop_back()
@@ -322,10 +384,16 @@ namespace gdt
         constexpr iterator emplace(const_iterator position, Args&&... args);
 
         // Insert.
-        constexpr iterator insert(const_iterator position, const T& x);
+        constexpr iterator insert(const_iterator position, const T& x)
+        {
+            return emplace(position, x);
+        }
 
         // Insert.
-        constexpr iterator insert(const_iterator position, T&& x);
+        constexpr iterator insert(const_iterator position, T&& x)
+        {
+            return emplace(position, std::move(x));
+        }
 
         // Insert.
         constexpr iterator insert(
@@ -343,7 +411,10 @@ namespace gdt
         // Insert.
         constexpr iterator insert(
             const_iterator position,
-            std::initializer_list<T> il);
+            std::initializer_list<T> il)
+        {
+            return insert(position, il.begin(), il.end());
+        }
 
         // Erase.
         constexpr iterator erase(const_iterator position);
@@ -354,8 +425,10 @@ namespace gdt
         // Swap.
         constexpr void swap(vector&)
         noexcept(
-            std::allocator_traits<Allocator>::propagate_on_container_swap::value ||
-            std::allocator_traits<Allocator>::is_always_equal::value);
+            std::allocator_traits<Allocator>::
+                propagate_on_container_swap::value ||
+            std::allocator_traits<Allocator>::
+                is_always_equal::value);
 
         // Clear.
         constexpr void clear() noexcept
@@ -372,6 +445,16 @@ namespace gdt
         pointer _ptr;
         size_type _size;
         size_type _capacity;
+
+        // Reserve or shrink.
+        constexpr void _reserve_or_shrink(size_type sz)
+        {
+            reserve(sz);
+            while (_size > sz)
+            {
+                pop_back();
+            }
+        }
     };
 
     // Deduction guide.
