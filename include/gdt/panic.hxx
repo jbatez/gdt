@@ -3,9 +3,9 @@
 namespace gdt
 {
     [[noreturn]] void panic(
-        char const *file,
+        const char* file,
         unsigned line,
-        char const *message
+        const char* message
     );
 }
 

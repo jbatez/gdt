@@ -8,6 +8,7 @@ target_compile_features(gdt INTERFACE cxx_std_20)
 target_include_directories(gdt INTERFACE include)
 
 if(BUILD_TESTING)
+  list(APPEND test_names allocator)
   list(APPEND test_names assert)
   list(APPEND test_names assume)
   list(APPEND test_names panic)
