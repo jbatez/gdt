@@ -1,6 +1,7 @@
 #pragma once
 
 #include "allocator.hxx"
+#include "assume.hxx"
 #include <compare>
 #include <initializer_list>
 #include <iterator>
@@ -303,7 +304,7 @@ namespace gdt_detail
         constexpr T& operator[](
             typename vector<T, Allocator>::difference_type n
         ) const {
-            return _ptr[n];
+            return _ptr[_ptr_diff(n)];
         }
 
         // Pre-increment.
@@ -337,7 +338,7 @@ namespace gdt_detail
             const vector_iterator& a,
             typename vector<T, Allocator>::difference_type n
         ) {
-            return vector_iterator(a._ptr + n);
+            return vector_iterator(a._ptr + _ptr_diff(n));
         }
 
         // Addition.
@@ -345,7 +346,7 @@ namespace gdt_detail
             typename vector<T, Allocator>::difference_type n,
             const vector_iterator& a
         ) {
-            return vector_iterator(n + a._ptr);
+            return vector_iterator(_ptr_diff(n) + a._ptr);
         }
 
         // Subtraction.
@@ -353,14 +354,14 @@ namespace gdt_detail
             const vector_iterator& a,
             typename vector<T, Allocator>::difference_type n
         ) {
-            return vector_iterator(a._ptr - n);
+            return vector_iterator(a._ptr - _ptr_diff(n));
         }
 
         // Subtraction.
         friend constexpr typename vector<T, Allocator>::difference_type
         operator-(const vector_iterator& b, const vector_iterator& a)
         {
-            return b._ptr - a._ptr;
+            return _vec_diff(b._ptr - a._ptr);
         }
 
         // Addition assignment.
@@ -368,7 +369,7 @@ namespace gdt_detail
             vector_iterator& r,
             typename vector<T, Allocator>::difference_type n
         ) {
-            r._ptr += n;
+            r._ptr += _ptr_diff(n);
             return *r;
         }
 
@@ -377,7 +378,7 @@ namespace gdt_detail
             vector_iterator& r,
             typename vector<T, Allocator>::difference_type n
         ) {
-            r._ptr -= n;
+            r._ptr -= _ptr_diff(n);
             return *r;
         }
 
@@ -386,7 +387,7 @@ namespace gdt_detail
             const vector_iterator& a,
             const vector_iterator& b
         ) {
-            return a == b;
+            return a._ptr == b._ptr;
         }
 
         // Comparison.
@@ -394,19 +395,39 @@ namespace gdt_detail
             const vector_iterator& a,
             const vector_iterator& b
         ) {
-            return a <=> b;
+            return a._ptr <=> b._ptr;
         }
 
     private:
+        // Member types.
+        using _pointer = typename vector<T, Allocator>::pointer;
+        using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
+        using _vector_diff = typename vector<T, Allocator>::difference_type;
+
         // Pointer.
-        typename vector<T, Allocator>::pointer _ptr;
+        _pointer _ptr;
 
         // Constructor.
-        explicit constexpr vector_iterator(
-            const typename vector<T, Allocator>::pointer& ptr
-        ) noexcept :
+        explicit constexpr vector_iterator(const _pointer& ptr) noexcept
+        :
             _ptr{ptr}
         {}
+
+        // Vector diff to pointer diff.
+        static constexpr _pointer_diff _ptr_diff(_vector_diff n)
+        {
+            auto ret = _pointer_diff(n);
+            gdt_assume(ret == n);
+            return ret;
+        }
+
+        // Pointer diff to vector diff.
+        static constexpr _vector_diff _vec_diff(_pointer_diff n)
+        {
+            auto ret = _vector_diff(n);
+            gdt_assume(ret == n);
+            return ret;
+        }
     };
 
     // Vector const iterator.
@@ -440,7 +461,7 @@ namespace gdt_detail
         constexpr const T& operator[](
             typename vector<T, Allocator>::difference_type n
         ) const {
-            return _ptr[n];
+            return _ptr[_ptr_diff(n)];
         }
 
         // Pre-increment.
@@ -474,7 +495,7 @@ namespace gdt_detail
             const vector_const_iterator& a,
             typename vector<T, Allocator>::difference_type n
         ) {
-            return vector_const_iterator(a._ptr + n);
+            return vector_const_iterator(a._ptr + _ptr_diff(n));
         }
 
         // Addition.
@@ -482,7 +503,7 @@ namespace gdt_detail
             typename vector<T, Allocator>::difference_type n,
             const vector_const_iterator& a
         ) {
-            return vector_const_iterator(n + a._ptr);
+            return vector_const_iterator(_ptr_diff(n) + a._ptr);
         }
 
         // Subtraction.
@@ -490,7 +511,7 @@ namespace gdt_detail
             const vector_const_iterator& a,
             typename vector<T, Allocator>::difference_type n
         ) {
-            return vector_const_iterator(a._ptr - n);
+            return vector_const_iterator(a._ptr - _ptr_diff(n));
         }
 
         // Subtraction.
@@ -499,7 +520,7 @@ namespace gdt_detail
             const vector_const_iterator& b,
             const vector_const_iterator& a
         ) {
-            return b._ptr - a._ptr;
+            return _vec_diff(b._ptr - a._ptr);
         }
 
         // Addition assignment.
@@ -507,7 +528,7 @@ namespace gdt_detail
             vector_const_iterator& r,
             typename vector<T, Allocator>::difference_type n
         ) {
-            r._ptr += n;
+            r._ptr += _ptr_diff(n);
             return *r;
         }
 
@@ -516,7 +537,7 @@ namespace gdt_detail
             vector_const_iterator& r,
             typename vector<T, Allocator>::difference_type n
         ) {
-            r._ptr -= n;
+            r._ptr -= _ptr_diff(n);
             return *r;
         }
 
@@ -525,7 +546,7 @@ namespace gdt_detail
             const vector_const_iterator& a,
             const vector_const_iterator& b
         ) {
-            return a == b;
+            return a._ptr == b._ptr;
         }
 
         // Comparison.
@@ -533,19 +554,39 @@ namespace gdt_detail
             const vector_const_iterator& a,
             const vector_const_iterator& b
         ) {
-            return a <=> b;
+            return a._ptr <=> b._ptr;
         }
 
     private:
+        // Member types.
+        using _pointer = typename vector<T, Allocator>::const_pointer;
+        using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
+        using _vector_diff = typename vector<T, Allocator>::difference_type;
+
         // Pointer.
-        typename vector<T, Allocator>::const_pointer _ptr;
+        _pointer _ptr;
 
         // Constructor.
-        explicit constexpr vector_const_iterator(
-            const typename vector<T, Allocator>::const_pointer& ptr
-        ) noexcept :
+        explicit constexpr vector_const_iterator(const _pointer& ptr) noexcept
+        :
             _ptr{ptr}
         {}
+
+        // Vector diff to pointer diff.
+        static constexpr _pointer_diff _ptr_diff(_vector_diff n)
+        {
+            auto ret = _pointer_diff(n);
+            gdt_assume(ret == n);
+            return ret;
+        }
+
+        // Pointer diff to vector diff.
+        static constexpr _vector_diff _vec_diff(_pointer_diff n)
+        {
+            auto ret = _vector_diff(n);
+            gdt_assume(ret == n);
+            return ret;
+        }
     };
 }
 
