@@ -44,17 +44,24 @@ namespace gdt
 
         constexpr size_type max_size() noexcept
         {
-            using common_t = std::common_type_t<std::size_t, size_type>;
-            return size_type((std::min)(
+            using common_t = std::common_type_t<
+                std::size_t, SizeT, std::make_unsigned_t<DiffT>
+            >;
+
+            auto size_type_max = (std::numeric_limits<SizeT>::max)();
+            auto diff_type_max = (std::numeric_limits<DiffT>::max)();
+
+            return size_type((std::min)({
                 common_t(SIZE_MAX / sizeof(value_type)),
-                common_t((std::numeric_limits<size_type>::max)())
-            ));
+                common_t(size_type_max / sizeof(value_type)),
+                common_t(diff_type_max)
+            }));
         }
 
         // Allocate.
         [[nodiscard]] constexpr T* allocate(size_type n)
         {
-            gdt_assert(n <= SIZE_MAX / sizeof(T));
+            gdt_assert(n <= max_size());
             auto size = std::size_t(sizeof(T) * n);
 
             if (std::is_constant_evaluated())
@@ -74,7 +81,6 @@ namespace gdt
             }
 
             gdt_assert(p != nullptr);
-            new(p) std::byte[size];
             return static_cast<T*>(p);
         }
 
@@ -94,6 +100,15 @@ namespace gdt
             {
                 ::operator delete(static_cast<void*>(p));
             }
+        }
+
+        // Equality.
+        template<typename U>
+        friend constexpr bool operator==(
+            const allocator&,
+            const allocator<U>&
+        ) noexcept {
+            return true;
         }
     };
 }
