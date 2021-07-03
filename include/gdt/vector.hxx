@@ -53,8 +53,8 @@ namespace gdt
         :
             _allocator{m},
             _ptr{nullptr},
-            _size{0},
-            _capacity{0}
+            _capacity{0},
+            _size{0}
         {}
 
         // Constructor.
@@ -100,8 +100,8 @@ namespace gdt
         :
             _allocator{std::move(x._allocator)},
             _ptr{std::exchange(x._ptr, nullptr)},
-            _size{std::exchange(x._size, 0)},
-            _capacity{std::exchange(x._capacity)}
+            _capacity{std::exchange(x._capacity, 0)},
+            _size{std::exchange(x._size, 0)}
         {}
 
         // Constructor.
@@ -126,7 +126,7 @@ namespace gdt
         // Destructor.
         constexpr ~vector()
         {
-            _clear_and_deallocate();
+            _destroy_all_and_deallocate();
         }
 
         // Assignment.
@@ -136,10 +136,11 @@ namespace gdt
                     propagate_on_container_copy_assignment::value &&
                 _allocator != x._allocator)
             {
-                _clear_and_deallocate();
+                _destroy_all_and_deallocate();
                 _allocator = x._allocator;
                 _ptr = nullptr;
                 _capacity = 0;
+                _size = 0;
             }
             assign(x.begin(), x.end());
         }
@@ -446,18 +447,16 @@ namespace gdt
         // Clear.
         constexpr void clear() noexcept
         {
-            while (!empty())
-            {
-                pop_back();
-            }
+            _destroy_all();
+            _size = 0;
         }
 
     private:
         // Member variables.
         [[no_unique_address]] Allocator _allocator;
         pointer _ptr;
-        size_type _size;
         size_type _capacity;
+        size_type _size;
 
         // Reserve or shrink.
         constexpr void _reserve_or_shrink(size_type sz)
@@ -469,10 +468,20 @@ namespace gdt
             }
         }
 
-        // Clear and deallocate.
-        constexpr void _clear_and_deallocate()
+        // Destroy all.
+        constexpr void _destroy_all()
         {
-            clear();
+            for (auto itr = rbegin(); itr != rend(); itr++)
+            {
+                std::allocator_traits<Allocator>::destroy(
+                    _allocator, std::addressof(*itr));
+            }
+        }
+
+        // Destroy all and deallocate.
+        constexpr void _destroy_all_and_deallocate()
+        {
+            _destroy_all();
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
         }
