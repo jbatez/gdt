@@ -111,7 +111,25 @@ namespace gdt
         {}
 
         // Constructor.
-        constexpr vector(vector&&, const Allocator&);
+        constexpr vector(vector&& x, const Allocator& m)
+        :
+            vector(m)
+        {
+            if (_allocator == x._allocator)
+            {
+                _ptr = std::exchange(x._ptr, nullptr);
+                _capacity = std::exchange(x._capacity, 0);
+                _size = std::exchange(x._size, 0);
+            }
+            else
+            {
+                reserve(x.size());
+                for (auto& e : x)
+                {
+                    push_back(std::move(e));
+                }
+            }
+        }
 
         // Constructor.
         constexpr vector(
@@ -471,7 +489,8 @@ namespace gdt
         // Destroy all.
         constexpr void _destroy_all()
         {
-            for (auto itr = rbegin(); itr != rend(); itr++)
+            auto rend = this->rend();
+            for (auto itr = rbegin(); itr != rend; itr++)
             {
                 std::allocator_traits<Allocator>::destroy(
                     _allocator, std::addressof(*itr));
