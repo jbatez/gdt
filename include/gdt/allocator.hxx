@@ -42,6 +42,7 @@ namespace gdt
         // Assignment.
         constexpr allocator& operator=(const allocator&) = default;
 
+        // Max size.
         constexpr size_type max_size() noexcept
         {
             using common_t = std::common_type_t<
