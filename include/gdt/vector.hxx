@@ -92,7 +92,7 @@ namespace gdt
         constexpr vector(const vector& x)
         :
             vector(x, std::allocator_traits<Allocator>::
-                select_on_container_copy_construction(x.get_allocator()))
+                select_on_container_copy_construction(x._allocator))
         {}
 
         // Constructor.
@@ -105,7 +105,10 @@ namespace gdt
         {}
 
         // Constructor.
-        constexpr vector(const vector&, const Allocator&);
+        constexpr vector(const vector& x, const Allocator& m)
+        :
+            vector(x.begin(), x.end(), m)
+        {}
 
         // Constructor.
         constexpr vector(vector&&, const Allocator&);
@@ -123,13 +126,23 @@ namespace gdt
         // Destructor.
         constexpr ~vector()
         {
-            clear();
-            std::allocator_traits<Allocator>::deallocate(
-                _allocator, _ptr, _capacity);
+            _clear_and_deallocate();
         }
 
         // Assignment.
-        constexpr vector& operator=(const vector& x);
+        constexpr vector& operator=(const vector& x)
+        {
+            if (std::allocator_traits<Allocator>::
+                    propagate_on_container_copy_assignment::value &&
+                _allocator != x._allocator)
+            {
+                _clear_and_deallocate();
+                _allocator = x._allocator;
+                _ptr = nullptr;
+                _capacity = 0;
+            }
+            assign(x.begin(), x.end());
+        }
 
         // Assignment.
         constexpr vector& operator=(vector&& x)
@@ -454,6 +467,14 @@ namespace gdt
             {
                 pop_back();
             }
+        }
+
+        // Clear and deallocate.
+        constexpr void _clear_and_deallocate()
+        {
+            clear();
+            std::allocator_traits<Allocator>::deallocate(
+                _allocator, _ptr, _capacity);
         }
     };
 
