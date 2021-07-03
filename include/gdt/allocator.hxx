@@ -15,8 +15,8 @@ namespace gdt
     template<
         typename T,
         typename SizeT = std::size_t,
-        typename DiffT = std::ptrdiff_t
-    > requires
+        typename DiffT = std::ptrdiff_t>
+    requires
         std::is_integral_v<SizeT> && std::is_unsigned_v<SizeT> &&
         std::is_integral_v<DiffT> && std::is_signed_v<DiffT>
     struct allocator
@@ -48,16 +48,15 @@ namespace gdt
         constexpr size_type max_size() noexcept
         {
             using common_t = std::common_type_t<
-                std::size_t, SizeT, std::make_unsigned_t<DiffT>
-            >;
+                std::size_t, SizeT, std::make_unsigned_t<DiffT>>;
 
-            auto size_type_max = (std::numeric_limits<SizeT>::max)();
-            auto diff_type_max = (std::numeric_limits<DiffT>::max)();
+            auto size_max = (std::numeric_limits<SizeT>::max)();
+            auto diff_max = (std::numeric_limits<DiffT>::max)();
 
             return size_type((std::min)({
                 common_t(SIZE_MAX / sizeof(value_type)),
-                common_t(size_type_max / sizeof(value_type)),
-                common_t(diff_type_max)
+                common_t(size_max / sizeof(value_type)),
+                common_t(diff_max)
             }));
         }
 
@@ -107,10 +106,9 @@ namespace gdt
 
         // Equality.
         template<typename U>
-        friend constexpr bool operator==(
-            const allocator&,
-            const allocator<U>&
-        ) noexcept {
+        friend constexpr bool operator==(const allocator&, const allocator<U>&)
+        noexcept
+        {
             return true;
         }
     };

@@ -3,9 +3,8 @@
 #include "panic.hxx"
 
 #ifndef NDEBUG
-#define gdt_assume(x) (static_cast<void>( \
-    (x) || (::gdt::panic(__FILE__, __LINE__, "gdt_assume("#x") failed"), 0) \
-))
+#define gdt_assume(x) (static_cast<void>(\
+    (x) || (::gdt::panic(__FILE__, __LINE__, "gdt_assume("#x") failed"), 0)))
 #elif defined(__clang__)
 #define gdt_assume(x) __builtin_assume(x)
 #elif defined(_MSC_VER)
