@@ -1,10 +1,12 @@
 #pragma once
 
 #include "allocator.hxx"
+#include "assert.hxx"
 #include "assume.hxx"
 #include <compare>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <memory>
 
 namespace gdt_detail
@@ -45,7 +47,13 @@ namespace gdt
         {}
 
         // Constructor.
-        explicit constexpr vector(const Allocator&) noexcept;
+        explicit constexpr vector(const Allocator& m) noexcept
+        :
+            _allocator{m},
+            _ptr{nullptr},
+            _size{0},
+            _capacity{0}
+        {}
 
         // Constructor.
         explicit constexpr vector(size_type n, const Allocator& = Allocator());
@@ -81,7 +89,13 @@ namespace gdt
         constexpr vector(std::initializer_list<T>, const Allocator& = Allocator());
 
         // Destructor.
-        constexpr ~vector();
+        constexpr ~vector()
+        {
+            clear();
+            std::allocator_traits<Allocator>::deallocate(
+                _allocator, _ptr, _capacity
+            );
+        }
 
         // Assignment.
         constexpr vector& operator=(const vector& x);
@@ -107,55 +121,106 @@ namespace gdt
         constexpr void assign(std::initializer_list<T>);
 
         // Get allocator.
-        constexpr allocator_type get_allocator() const noexcept;
+        constexpr allocator_type get_allocator() const noexcept
+        {
+            return _allocator;
+        }
 
         // Begin.
-        constexpr iterator begin() noexcept;
+        constexpr iterator begin() noexcept
+        {
+            return iterator(_ptr);
+        }
 
         // Begin.
-        constexpr const_iterator begin() const noexcept;
+        constexpr const_iterator begin() const noexcept
+        {
+            return const_iterator(_ptr);
+        }
 
         // End.
-        constexpr iterator end() noexcept;
+        constexpr iterator end() noexcept
+        {
+            return begin() + difference_type(_size);
+        }
 
         // End.
-        constexpr const_iterator end() const noexcept;
+        constexpr const_iterator end() const noexcept
+        {
+            return begin() + difference_type(_size);
+        }
 
         // Reverse begin.
-        constexpr reverse_iterator rbegin() noexcept;
+        constexpr reverse_iterator rbegin() noexcept
+        {
+            return reverse_iterator(end());
+        }
 
         // Reverse begin.
-        constexpr const_reverse_iterator rbegin() const noexcept;
+        constexpr const_reverse_iterator rbegin() const noexcept
+        {
+            return const_reverse_iterator(end());
+        }
 
         // Reverse end.
-        constexpr reverse_iterator rend() noexcept;
+        constexpr reverse_iterator rend() noexcept
+        {
+            return reverse_iterator(begin());
+        }
 
         // Reverse end.
-        constexpr const_reverse_iterator rend() const noexcept;
+        constexpr const_reverse_iterator rend() const noexcept
+        {
+            return const_reverse_iterator(begin());
+        }
 
         // Const begin.
-        constexpr const_iterator cbegin() const noexcept;
+        constexpr const_iterator cbegin() const noexcept
+        {
+            return begin();
+        }
 
         // Const end.
-        constexpr const_iterator cend() const noexcept;
+        constexpr const_iterator cend() const noexcept
+        {
+            return end();
+        }
 
         // Const reverse begin.
-        constexpr const_reverse_iterator crbegin() const noexcept;
+        constexpr const_reverse_iterator crbegin() const noexcept
+        {
+            return rbegin();
+        }
 
         // Const reverse end.
-        constexpr const_reverse_iterator crend() const noexcept;
+        constexpr const_reverse_iterator crend() const noexcept
+        {
+            return rend();
+        }
 
         // Empty?
-        [[nodiscard]] constexpr bool empty() const noexcept;
+        [[nodiscard]] constexpr bool empty() const noexcept
+        {
+            return _size == 0;
+        }
 
         // Size.
-        constexpr size_type size() const noexcept;
+        constexpr size_type size() const noexcept
+        {
+            return _size;
+        }
 
         // Max size.
-        constexpr size_type max_size() const noexcept;
+        constexpr size_type max_size() const noexcept
+        {
+            return std::allocator_traits<Allocator>::max_size(_allocator);
+        }
 
         // Capacity.
-        constexpr size_type capacity() const noexcept;
+        constexpr size_type capacity() const noexcept
+        {
+            return _capacity;
+        }
 
         // Resize.
         constexpr void resize(size_type sz);
@@ -170,34 +235,72 @@ namespace gdt
         constexpr void shrink_to_fit();
 
         // Subscript.
-        constexpr reference operator[](size_type n);
+        constexpr reference operator[](size_type n)
+        {
+            gdt_assume(n <= (std::numeric_limits<difference_type>::max)());
+            return begin()[difference_type(n)];
+        }
 
         // Subscript.
-        constexpr const_reference operator[](size_type n) const;
+        constexpr const_reference operator[](size_type n) const
+        {
+            gdt_assume(n <= (std::numeric_limits<difference_type>::max)());
+            return begin()[difference_type(n)];
+        }
 
         // At.
-        constexpr const_reference at(size_type n) const;
+        constexpr const_reference at(size_type n) const
+        {
+            gdt_assert(n < size());
+            return begin()[difference_type(n)];
+        }
 
         // At.
-        constexpr reference at(size_type n);
+        constexpr reference at(size_type n)
+        {
+            gdt_assert(n < size());
+            return begin()[difference_type(n)];
+        }
 
         // Front.
-        constexpr reference front();
+        constexpr reference front()
+        {
+            gdt_assume(!empty());
+            return *begin();
+        }
 
         // Front.
-        constexpr const_reference front() const;
+        constexpr const_reference front() const
+        {
+            gdt_assume(!empty());
+            return *begin();
+        }
 
         // Back.
-        constexpr reference back();
+        constexpr reference back()
+        {
+            gdt_assume(!empty());
+            return *(end() - 1);
+        }
 
         // Back.
-        constexpr const_reference back() const;
+        constexpr const_reference back() const
+        {
+            gdt_assume(!empty());
+            return *(end() - 1);
+        }
 
         // Data.
-        constexpr T* data() noexcept;
+        constexpr T* data() noexcept
+        {
+            return std::to_address(_ptr);
+        }
 
         // Data.
-        constexpr const T* data() const noexcept;
+        constexpr const T* data() const noexcept
+        {
+            return std::to_address(_ptr);
+        }
 
         // Emplace back.
         template<typename... Args>
@@ -210,7 +313,12 @@ namespace gdt
         constexpr void push_back(T&& x);
 
         // Pop back.
-        constexpr void pop_back();
+        constexpr void pop_back()
+        {
+            gdt_assume(!empty());
+            back().~T();
+            _size--;
+        }
 
         // Emplace.
         template<typename... Args>
@@ -257,7 +365,20 @@ namespace gdt
         );
 
         // Clear.
-        constexpr void clear() noexcept;
+        constexpr void clear() noexcept
+        {
+            while (!empty())
+            {
+                pop_back();
+            }
+        }
+
+    private:
+        // Member variables.
+        [[no_unique_address]] Allocator _allocator;
+        pointer _ptr;
+        size_type _size;
+        size_type _capacity;
     };
 
     // Deduction guide.
@@ -399,12 +520,16 @@ namespace gdt_detail
         }
 
     private:
+        // Friends.
+        friend vector<T, Allocator>;
+        friend vector_const_iterator<T, Allocator>;
+
         // Member types.
         using _pointer = typename vector<T, Allocator>::pointer;
         using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
         using _vector_diff = typename vector<T, Allocator>::difference_type;
 
-        // Pointer.
+        // Member variables.
         _pointer _ptr;
 
         // Constructor.
@@ -413,7 +538,7 @@ namespace gdt_detail
             _ptr{ptr}
         {}
 
-        // Vector diff to pointer diff.
+        // Pointer diff from vector diff.
         static constexpr _pointer_diff _ptr_diff(_vector_diff n)
         {
             auto ret = _pointer_diff(n);
@@ -421,7 +546,7 @@ namespace gdt_detail
             return ret;
         }
 
-        // Pointer diff to vector diff.
+        // Vector diff from pointer diff.
         static constexpr _vector_diff _vec_diff(_pointer_diff n)
         {
             auto ret = _vector_diff(n);
@@ -558,12 +683,15 @@ namespace gdt_detail
         }
 
     private:
+        // Friends.
+        friend vector<T, Allocator>;
+
         // Member types.
         using _pointer = typename vector<T, Allocator>::const_pointer;
         using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
         using _vector_diff = typename vector<T, Allocator>::difference_type;
 
-        // Pointer.
+        // Member variables.
         _pointer _ptr;
 
         // Constructor.
@@ -572,7 +700,7 @@ namespace gdt_detail
             _ptr{ptr}
         {}
 
-        // Vector diff to pointer diff.
+        // Pointer diff from vector diff.
         static constexpr _pointer_diff _ptr_diff(_vector_diff n)
         {
             auto ret = _pointer_diff(n);
@@ -580,7 +708,7 @@ namespace gdt_detail
             return ret;
         }
 
-        // Pointer diff to vector diff.
+        // Vector diff from pointer diff.
         static constexpr _vector_diff _vec_diff(_pointer_diff n)
         {
             auto ret = _vector_diff(n);
