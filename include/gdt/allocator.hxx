@@ -11,6 +11,7 @@
 
 namespace gdt
 {
+    // Allocator.
     template<
         typename T,
         typename SizeT = std::size_t,
@@ -20,6 +21,7 @@ namespace gdt
         std::is_integral_v<DiffT> && std::is_signed_v<DiffT>
     struct allocator
     {
+        // Member types.
         using value_type = T;
         using size_type = SizeT;
         using difference_type = DiffT;

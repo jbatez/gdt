@@ -1,15 +1,18 @@
 #pragma once
 
 #include "allocator.hxx"
+#include <compare>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
 
 namespace gdt
 {
+    // Vector.
     template<typename T, typename Allocator = allocator<T>>
     class vector {
     public:
+        // Member types.
         using value_type = T;
         using allocator_type = Allocator;
         using pointer = typename std::allocator_traits<Allocator>::pointer;
@@ -70,7 +73,7 @@ namespace gdt
 
         // Assignment.
         constexpr vector& operator=(const vector& x);
-        
+
         // Assignment.
         constexpr vector& operator=(vector&& x)
         noexcept(
@@ -259,4 +262,133 @@ namespace gdt
     template<typename T, typename Allocator>
     constexpr void swap(vector<T, Allocator>& x, vector<T, Allocator>& y)
     noexcept(noexcept(x.swap(y)));
+
+    // Vector iterator.
+    template<typename T, typename Allocator>
+    class vector<T, Allocator>::iterator {
+    public:
+        // Constructor.
+        constexpr iterator() = default;
+
+        // Dereference.
+        constexpr T& operator*() const
+        {
+            return *_ptr;
+        }
+
+        // Member access.
+        constexpr vector<T, Allocator>::pointer operator->() const noexcept
+        {
+            return _ptr;
+        }
+
+        // Subscript.
+        constexpr T& operator[](vector<T, Allocator>::difference_type n) const
+        {
+            return _ptr[n];
+        }
+
+        // Pre-increment.
+        constexpr iterator& operator++()
+        {
+            ++_ptr;
+            return *this;
+        }
+
+        // Pre-decrement.
+        constexpr iterator& operator--()
+        {
+            --_ptr;
+            return *this;
+        }
+
+        // Post-increment.
+        constexpr iterator operator++(int)
+        {
+            return iterator(_ptr++);
+        }
+
+        // Post-decrement.
+        constexpr iterator operator--(int)
+        {
+            return iterator(_ptr--);
+        }
+
+        // Addition.
+        friend constexpr iterator operator+(
+            const iterator& a,
+            vector<T, Allocator>::difference_type n
+        ) {
+            return iterator(a._ptr + n);
+        }
+
+        // Addition.
+        friend constexpr iterator operator+(
+            vector<T, Allocator>::difference_type n,
+            const iterator& a
+        ) {
+            return iterator(n + a._ptr);
+        }
+
+        // Subtraction.
+        friend constexpr iterator operator-(
+            const iterator& a,
+            vector<T, Allocator>::difference_type n
+        ) {
+            return iterator(a._ptr - n);
+        }
+
+        // Subtraction.
+        friend constexpr vector<T, Allocator>::difference_type operator-(
+            const iterator& b,
+            const iterator& a
+        ) {
+            return b._ptr - a._ptr;
+        }
+
+        // Addition assignment.
+        friend constexpr iterator& operator+=(
+            iterator& r,
+            vector<T, Allocator>::difference_type n
+        ) {
+            r._ptr += n;
+            return *r;
+        }
+
+        // Subtraction assignment.
+        friend constexpr iterator& operator-=(
+            iterator& r,
+            vector<T, Allocator>::difference_type n
+        ) {
+            r._ptr -= n;
+            return *r;
+        }
+
+        // Equality.
+        friend constexpr bool operator==(
+            const iterator& a,
+            const iterator& b
+        ) {
+            return a == b;
+        }
+
+        // Comparison.
+        friend constexpr auto operator<=>(
+            const iterator& a,
+            const iterator& b
+        ) {
+            return a <=> b;
+        }
+
+    private:
+        // Pointer.
+        vector<T, Allocator>::pointer _ptr;
+
+        // Constructor.
+        explicit constexpr iterator(
+            const vector<T, Allocator>::pointer& ptr
+        ) noexcept :
+            _ptr(ptr)
+        {}
+    };
 }
