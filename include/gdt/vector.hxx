@@ -315,8 +315,9 @@ namespace gdt
         // Pop back.
         constexpr void pop_back()
         {
-            gdt_assume(!empty());
-            back().~T();
+            std::allocator_traits<Allocator>::destroy(
+                _allocator, std::addressof(back())
+            );
             _size--;
         }
 
