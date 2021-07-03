@@ -13,6 +13,7 @@ if(BUILD_TESTING)
   list(APPEND test_names assume)
   list(APPEND test_names panic)
   list(APPEND test_names unreachable)
+  list(APPEND test_names vector)
 
   set(test_sources ${test_names})
   list(TRANSFORM test_sources PREPEND test/)
