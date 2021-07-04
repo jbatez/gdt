@@ -500,10 +500,12 @@ namespace gdt
         constexpr reference emplace_back(Args&&... args)
         {
             _reserve_additional(1);
+            auto& ret = *end();
             std::allocator_traits<Allocator>::construct(
-                _allocator, std::addressof(*end()),
+                _allocator, std::addressof(ret),
                 std::forward<Args>(args)...);
             ++_size;
+            return ret;
         }
 
         // Push back.
