@@ -241,11 +241,10 @@ namespace gdt
             typename std::iterator_traits<InputIterator>::iterator_category>
         constexpr void assign(InputIterator first, InputIterator last)
         {
-            if constexpr (
-                std::is_base_of_v<
-                    std::forward_iterator_tag,
-                    typename std::iterator_traits<InputIterator>::
-                        iterator_category>)
+            if constexpr (std::is_base_of_v<
+                std::forward_iterator_tag,
+                typename std::iterator_traits<InputIterator>::
+                    iterator_category>)
             {
                 auto n = std::distance(first, last);
                 gdt_assert(n <= difference_type(max_size()));
@@ -602,7 +601,43 @@ namespace gdt
         constexpr iterator insert(
             const_iterator position,
             InputIterator first,
-            InputIterator last);
+            InputIterator last)
+        {
+            if constexpr (std::is_base_of_v<
+                std::forward_iterator_tag,
+                typename std::iterator_traits<InputIterator>::
+                    iterator_category>)
+            {
+                auto n = size_type(std::distance(first, last));
+                size_type needed = _size + n;
+                gdt_assert(needed >= n); // Assert no overflow.
+
+                if (_capacity < needed)
+                {
+                    // Insert in the middle of migration to a larger buffer.
+                    auto new_capacity = _choose_new_capacity(needed);
+                    auto new_ptr = _allocate(new_capacity);
+                    return _migrate_insert(
+                        new_ptr, new_capacity, position, n, first);
+                }
+                else
+                {
+                    // Replace existing elements after making a gap.
+                    return _replace_insert(position, n, first, last);
+                }
+            }
+            else
+            {
+                // No way to predict how many elements.
+                // Best we can do is insert one at a time.
+                auto pidx = position - begin();
+                for (auto didx = pidx; first != last; ++first, ++didx)
+                {
+                    insert(begin() + didx, *first);
+                }
+                return begin() + pidx;
+            }
+        }
 
         // Insert.
         constexpr iterator insert(
@@ -802,7 +837,6 @@ namespace gdt
         }
 
         // Migrate to a new buffer with inserts in the middle.
-        template<typename... Args>
         constexpr iterator _migrate_insert(
             pointer new_ptr,
             size_type new_capacity,
@@ -827,6 +861,49 @@ namespace gdt
             {
                 std::allocator_traits<Allocator>::construct(
                     _allocator, std::addressof(*dst), x);
+            }
+
+            // Migrate after position.
+            _migrate(dst, old_begin + pidx, size_type(_size - pidx));
+
+            // Free the old buffer and use the new buffer.
+            std::allocator_traits<Allocator>::deallocate(
+                _allocator, _ptr, _capacity);
+            _ptr = new_ptr;
+            _capacity = new_capacity;
+            _size += 1;
+
+            // Done.
+            return ret;
+        }
+
+        // Migrate to a new buffer with inserts in the middle.
+        template<typename InputIterator>
+        constexpr iterator _migrate_insert(
+            pointer new_ptr,
+            size_type new_capacity,
+            const_iterator position,
+            size_type n,
+            InputIterator itr)
+        noexcept // `noexcept` is important here!
+        {
+            gdt_assume(new_capacity > _size);
+
+            auto old_begin = begin();
+            auto new_begin = iterator(new_ptr);
+            auto pidx = position - old_begin;
+
+            // Migrate up to position.
+            _migrate(new_begin, old_begin, size_type(pidx));
+
+            // Insert at position.
+            auto ret = new_begin + pidx;
+            auto dst = ret;
+            for (; n > 0; ++dst, --n)
+            {
+                std::allocator_traits<Allocator>::construct(
+                    _allocator, std::addressof(*dst), *itr);
+                ++itr;
             }
 
             // Migrate after position.
@@ -894,7 +971,6 @@ namespace gdt
         }
 
         // Insert in the existing buffer.
-        template<typename... Args>
         constexpr iterator _replace_insert(
             const_iterator position,
             size_type n,
@@ -936,6 +1012,75 @@ namespace gdt
             }
 
             // Done.
+            return ret;
+        }
+
+        // Insert in the existing buffer.
+        template<typename InputIterator>
+        constexpr iterator _replace_insert(
+            const_iterator position,
+            size_type n,
+            InputIterator x_first,
+            InputIterator x_last)
+        noexcept // `noexcept` is important here!
+        {
+            gdt_assume(size_type(_size + n) >= n);
+            auto old_end = end();
+
+            // Move all elements >= `position` back `n` indices.
+            auto m = n;
+            auto src = old_end;
+            for (; m > 0 && src > position; --m)
+            {
+                --src;
+                auto dst = src + n;
+                std::allocator_traits<Allocator>::construct(
+                    _allocator, std::addressof(*dst), std::move(*src));
+            }
+
+            auto first = begin();
+            auto ret = position - first + first;
+            std::move_backward(ret, src, src + n);
+
+            if constexpr (std::is_base_of_v<
+                std::bidirectional_iterator_tag,
+                typename std::iterator_traits<InputIterator>::
+                    iterator_category>)
+            {
+                // Copy-construct elements past the end of the old array.
+                auto dst = ret + n;
+                while (dst > old_end && dst > position)
+                {
+                    std::allocator_traits<Allocator>::construct(
+                        _allocator, std::addressof(*--dst), *--x_last);
+                }
+
+                // Copy-assign elements inside the old array.
+                while (dst > position)
+                {
+                    *--dst = *--x_last;
+                }
+            }
+            else
+            {
+                // Copy-assign elements inside the old array.
+                auto dst = ret;
+                auto copy_end = ret + n;
+                while (dst < old_end && dst < copy_end)
+                {
+                    *dst++ = *x_first++;
+                }
+
+                // Copy-construct elements past the end of the old array.
+                while (dst < copy_end)
+                {
+                    std::allocator_traits<Allocator>::construct(
+                        _allocator, std::addressof(*dst++), *x_first++);
+                }
+            }
+
+            // Done.
+            _size += n;
             return ret;
         }
 
