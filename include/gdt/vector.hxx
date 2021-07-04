@@ -403,10 +403,31 @@ namespace gdt
         }
 
         // Reserve.
-        constexpr void reserve(size_type n);
+        constexpr void reserve(size_type n)
+        {
+            if (_capacity < n)
+            {
+                auto max_capacity = max_size();
+                gdt_assert(n <= max_capacity);
+
+                auto capacity_x2 = _capacity * 2;
+                if (capacity_x2 < _capacity || capacity_x2 > max_capacity)
+                {
+                    capacity_x2 = max_capacity;
+                }
+
+                _reallocate(std::max(n, capacity_x2));
+            }
+        }
 
         // Shrink to fit.
-        constexpr void shrink_to_fit();
+        constexpr void shrink_to_fit()
+        {
+            if (_capacity > _size)
+            {
+                _reallocate(_size);
+            }
+        }
 
         // Subscript.
         constexpr reference operator[](size_type n)
@@ -566,11 +587,40 @@ namespace gdt
         size_type _size;
 
         // Take buffer.
-        constexpr void _take_buffer(vector& x)
+        constexpr void _take_buffer(vector& x) noexcept
         {
             _ptr = std::exchange(x._ptr, nullptr);
             _capacity = std::exchange(x._capacity, 0);
             _size = std::exchange(x._size, 0);
+        }
+
+        // Migrate to.
+        constexpr void _migrate_to(pointer dst, size_type dst_capacity)
+        noexcept // `noexcept` is important here!
+        {
+            gdt_assume(dst_capacity >= _size);
+
+            for (auto& e : *this)
+            {
+                std::allocator_traits<Allocator>::construct(
+                    _allocator, std::to_address(dst), std::move(e));
+                std::allocator_traits<Allocator>::destroy(
+                    _allocator, std::addressof(e));
+            }
+            std::allocator_traits<Allocator>::deallocate(
+                _allocator, _ptr, _capacity);
+
+            _ptr = dst;
+            _capacity = dst_capacity;
+        }
+
+        // Reallocate.
+        constexpr void _reallocate(size_type new_capacity)
+        {
+            // It's important to keep _migrate_to and _reallocate separate.
+            // We want allocation but not migration exceptions to propagate.
+            _migrate_to(std::allocator_traits<Allocator>::allocate(
+                _allocator, new_capacity));
         }
 
         // Reserve or shrink.
@@ -623,8 +673,11 @@ namespace gdt
         }
 
         // Destroy all.
-        constexpr void _destroy(size_type first, size_type last)
+        constexpr void _destroy(size_type first, size_type last) noexcept
         {
+            gdt_assume(first <= last);
+            gdt_assume(last <= _size);
+
             for (auto i = first; i < last; ++i)
             {
                 std::allocator_traits<Allocator>::destroy(
@@ -633,7 +686,7 @@ namespace gdt
         }
 
         // Destroy all and deallocate.
-        constexpr void _destroy_all_and_deallocate()
+        constexpr void _destroy_all_and_deallocate() noexcept
         {
             _destroy(0, _size);
             std::allocator_traits<Allocator>::deallocate(
@@ -641,14 +694,14 @@ namespace gdt
         }
 
         // Erase after.
-        constexpr void _erase_after(size_type i)
+        constexpr void _erase_after(size_type i) noexcept
         {
             _destroy(i, _size);
             _size = i;
         }
 
         // Reset.
-        constexpr void _reset()
+        constexpr void _reset() noexcept
         {
             _destroy_all_and_deallocate();
             _ptr = nullptr;
