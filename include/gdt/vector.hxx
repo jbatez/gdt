@@ -202,18 +202,18 @@ namespace gdt
                 else
                 {
                     _reserve_exact_without_move(x._size);
-                    auto move_len = difference_type(std::min(_size, x._size));
-                    std::move(x.begin(), x.begin() + move_len, begin());
+                    auto src_begin = x.begin();
+                    auto src_len = std::min(_size, x._size);
+                    auto src_end = src_begin + difference_type(src_len);
+                    std::move(src_begin, src_end, begin());
 
                     if (_size < x._size)
                     {
-                        auto first = x.begin() + difference_type(_size);
-                        _push_back_move(first, x.end());
+                        _push_back_move(src_end, x.end());
                     }
-                    else if (_size > x._size)
+                    else
                     {
-                        _destroy(x._size, _size);
-                        _size = x._size;
+                        _erase_after(src_len);
                     }
                 }
             }
@@ -250,13 +250,14 @@ namespace gdt
                 (*this)[i] = *itr;
             }
 
-            for (; itr != last; ++itr)
+            if (itr != last)
             {
-                push_back(*itr);
+                _push_back(itr, last);
             }
-
-            _destroy(i, _size);
-            _size = i;
+            else
+            {
+                _erase_after(i);
+            }
         }
 
         // Assign.
@@ -270,10 +271,9 @@ namespace gdt
             {
                 _fill_to(n, u);
             }
-            else if (_size > n)
+            else
             {
-                _destroy(n, _size);
-                _size = n;
+                _erase_after(n);
             }
         }
 
@@ -593,6 +593,16 @@ namespace gdt
             }
         }
 
+        // Push back.
+        template<typename InputIterator>
+        constexpr void _push_back(InputIterator first, InputIterator last)
+        {
+            for (auto itr = first; itr != last; ++itr)
+            {
+                push_back(*itr);
+            }
+        }
+
         // Push back move.
         template<typename InputIterator>
         constexpr void _push_back_move(InputIterator first, InputIterator last)
@@ -628,6 +638,13 @@ namespace gdt
             _destroy(0, _size);
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
+        }
+
+        // Erase after.
+        constexpr void _erase_after(size_type i)
+        {
+            _destroy(i, _size);
+            _size = i;
         }
 
         // Reset.
