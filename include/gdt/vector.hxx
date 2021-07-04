@@ -411,14 +411,7 @@ namespace gdt
         {
             if (_capacity < n)
             {
-                size_type max_capacity = max_size();
-                size_type capacity_x2 = _capacity * 2;
-                if (capacity_x2 < _capacity || capacity_x2 > max_capacity)
-                {
-                    capacity_x2 = max_capacity;
-                }
-
-                _reallocate(std::max(n, capacity_x2));
+                _reallocate(_choose_new_capacity(n));
             }
         }
 
@@ -503,8 +496,8 @@ namespace gdt
         template<typename... Args>
         constexpr reference emplace_back(Args&&... args)
         {
-            _reserve_additional(1);
-            auto& ret = *end();
+            _reallocate(_choose_additional_capacity(1));
+            T& ret = *end();
             std::allocator_traits<Allocator>::construct(
                 _allocator, std::addressof(ret),
                 std::forward<Args>(args)...);
@@ -534,7 +527,21 @@ namespace gdt
 
         // Emplace.
         template<typename... Args>
-        constexpr iterator emplace(const_iterator position, Args&&... args);
+        constexpr iterator emplace(const_iterator position, Args&&... args)
+        {
+            if (_size == _capacity)
+            {
+                auto new_capacity = _choose_additional_capacity(1);
+                auto new_ptr = _allocate(new_capacity);
+                return _migrate_emplace(
+                    new_ptr, new_capacity, position,
+                    std::forward<Args>(args)...);
+            }
+            else
+            {
+                return _replace_emplace(position, std::forward<Args>(args)...);
+            }
+        }
 
         // Insert.
         constexpr iterator insert(const_iterator position, const T& x)
@@ -608,6 +615,41 @@ namespace gdt
             _size = std::exchange(x._size, 0);
         }
 
+        // Choose new capacity.
+        constexpr size_type _choose_new_capacity(size_type n) noexcept
+        {
+            auto max_capacity = max_size();
+            auto capacity_x2 = size_type(_capacity * 2);
+            if (capacity_x2 < _capacity || capacity_x2 > max_capacity)
+            {
+                capacity_x2 = max_capacity;
+            }
+
+            return std::max(n, capacity_x2);
+        }
+
+        // Choose additional capacity.
+        constexpr size_type _choose_additional_capacity(size_type n)
+        {
+            n += _size;
+            gdt_assert(n >= size()); // Assert no overflow.
+            return _choose_new_capacity(n);
+        }
+
+        // Allocate.
+        constexpr pointer _allocate(size_type n)
+        {
+            if (n == 0)
+            {
+                return nullptr;
+            }
+            else
+            {
+                return std::allocator_traits<Allocator>::allocate(
+                    _allocator, n);
+            }
+        }
+
         // Migrate.
         constexpr void _migrate(iterator dst, iterator src, size_type n)
         noexcept // `noexcept` is important here!
@@ -626,13 +668,7 @@ namespace gdt
         {
             gdt_assume(new_capacity >= _size);
 
-            pointer new_ptr = nullptr;
-            if (new_capacity > 0)
-            {
-                new_ptr = std::allocator_traits<Allocator>::allocate(
-                    _allocator, new_capacity);
-            }
-
+            auto new_ptr = _allocate(new_capacity);
             _migrate(iterator(new_ptr), begin(), _size);
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
@@ -659,14 +695,6 @@ namespace gdt
                 _reset();
                 reserve(sz);
             }
-        }
-
-        // Reserve additional.
-        constexpr void _reserve_additional(size_type n)
-        {
-            n += size;
-            gdt_assert(n >= size());
-            reserve(n);
         }
 
         // Push back.
@@ -698,8 +726,86 @@ namespace gdt
             }
         }
 
+        // Migrate emplace.
+        template<typename... Args>
+        constexpr iterator _migrate_emplace(
+            pointer new_ptr,
+            size_type new_capacity,
+            const_iterator position,
+            Args&&... args)
+        noexcept // `noexcept` is important here!
+        {
+            gdt_assume(new_capacity > _size);
+
+            auto old_begin = begin();
+            auto new_begin = iterator(new_ptr);
+            auto pidx = position - old_begin;
+
+            _migrate(new_begin, old_begin, size_type(pidx));
+
+            auto ret = new_begin + pidx;
+            std::allocator_traits<Allocator>::construct(
+                _allocator, std::addressof(*ret),
+                std::forward<Args>(args)...);
+
+            _migrate(ret + 1, old_begin + pidx, size_type(_size - pidx));
+
+            std::allocator_traits<Allocator>::deallocate(
+                _allocator, _ptr, _capacity);
+            _ptr = new_ptr;
+            _capacity = new_capacity;
+            _size += 1;
+
+            return ret;
+        }
+
+        // Replace.
+        template<typename... Args>
+        constexpr void _replace(T* p, Args&&... args)
+        noexcept // `noexcept` is important here!
+        {
+            std::allocator_traits<Allocator>::destroy(
+                _allocator, p);
+            std::allocator_traits<Allocator>::construct(
+                _allocator, p, std::forward<Args>(args)...);
+        }
+
+        // Replace emplace.
+        template<typename... Args>
+        constexpr iterator _replace_emplace(
+            const_iterator position,
+            Args&&... args)
+        {
+            gdt_assume(_capacity > _size);
+
+            auto last = end();
+            if (position == last)
+            {
+                std::allocator_traits<Allocator>::construct(
+                    _allocator, std::addressof(*last),
+                    std::forward<Args>(args)...);
+                ++_size;
+                return last;
+            }
+            else
+            {
+                auto last_m1 = last - 1;
+                std::allocator_traits<Allocator>::construct(
+                    _allocator, std::addressof(*last),
+                    std::move(*last_m1));
+                ++_size;
+
+                auto first = begin();
+                auto ret = position - first + first;
+                std::move_backward(ret, last_m1, last);
+                _replace(std::addressof(*ret), std::forward<Args>(args)...);
+                return ret;
+            }
+        }
+
         // Destroy all.
-        constexpr void _destroy(size_type first, size_type last) noexcept
+        constexpr void _destroy(size_type first, size_type last)
+        noexcept // `noexcept` is important here!
         {
             gdt_assume(first <= last);
             gdt_assume(last <= _size);
@@ -712,7 +818,8 @@ namespace gdt
         }
 
         // Destroy all and deallocate.
-        constexpr void _destroy_all_and_deallocate() noexcept
+        constexpr void _destroy_all_and_deallocate()
+        noexcept // `noexcept` is important here!
         {
             _destroy(0, _size);
             std::allocator_traits<Allocator>::deallocate(
