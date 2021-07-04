@@ -239,11 +239,11 @@ namespace gdt
         {
             if constexpr (
                 std::is_base_of_v<
-                    std::random_access_iterator_tag,
+                    std::forward_iterator_tag,
                     typename std::iterator_traits<InputIterator>::
                         iterator_category>)
             {
-                auto n = last - first;
+                auto n = std::distance(first, last);
                 gdt_assert(n <= difference_type(max_size()));
                 _reserve_exact_without_move(size_type(n));
             }
