@@ -51,31 +51,33 @@ namespace gdt
         {}
 
         // Constructor.
-        explicit constexpr vector(const Allocator& m) noexcept
+        explicit constexpr vector(const Allocator& allocator) noexcept
         :
-            _allocator{m},
+            _allocator{allocator},
             _ptr{nullptr},
             _capacity{0},
             _size{0}
         {}
 
         // Constructor.
-        explicit constexpr vector(size_type n, const Allocator& m = Allocator())
+        explicit constexpr vector(
+            size_type len,
+            const Allocator& allocator = Allocator())
         :
-            vector(m)
+            vector(allocator)
         {
-            resize(n);
+            resize(len);
         }
 
         // Constructor.
         constexpr vector(
-            size_type n,
-            const T& value,
-            const Allocator& m = Allocator())
+            size_type len,
+            const T& fill_value,
+            const Allocator& allocator = Allocator())
         :
-            vector(m)
+            vector(allocator)
         {
-            assign(n, value);
+            assign(len, fill_value);
         }
 
         // Constructor.
@@ -86,62 +88,62 @@ namespace gdt
         constexpr vector(
             InputIterator first,
             InputIterator last,
-            const Allocator& m = Allocator())
+            const Allocator& allocator = Allocator())
         :
-            vector(m)
+            vector(allocator)
         {
             assign(first, last);
         }
 
         // Constructor.
-        constexpr vector(const vector& x)
+        constexpr vector(const vector& other)
         :
-            vector(x, std::allocator_traits<Allocator>::
-                select_on_container_copy_construction(x._allocator))
+            vector(other, std::allocator_traits<Allocator>::
+                select_on_container_copy_construction(other._allocator))
         {}
 
         // Constructor.
-        constexpr vector(vector&& x) noexcept
+        constexpr vector(vector&& other) noexcept
         :
-            _allocator{std::move(x._allocator)},
-            _ptr{std::exchange(x._ptr, nullptr)},
-            _capacity{std::exchange(x._capacity, 0)},
-            _size{std::exchange(x._size, 0)}
+            _allocator{std::move(other._allocator)},
+            _ptr{std::exchange(other._ptr, nullptr)},
+            _capacity{std::exchange(other._capacity, 0)},
+            _size{std::exchange(other._size, 0)}
         {}
 
         // Constructor.
-        constexpr vector(const vector& x, const Allocator& m)
+        constexpr vector(const vector& other, const Allocator& allocator)
         :
-            vector(x.begin(), x.end(), m)
+            vector(other.begin(), other.end(), allocator)
         {}
 
         // Constructor.
-        constexpr vector(vector&& x, const Allocator& m)
+        constexpr vector(vector&& other, const Allocator& allocator)
         :
-            vector(m)
+            vector(allocator)
         {
             if constexpr (
                 std::allocator_traits<Allocator>::is_always_equal::value)
             {
-                _take_buffer(x);
+                _take_buffer(other);
             }
-            else if (_allocator == x._allocator)
+            else if (_allocator == other._allocator)
             {
-                _take_buffer(x);
+                _take_buffer(other);
             }
             else
             {
-                reserve(x._size);
-                _push_back_move(x.begin(), x.end());
+                reserve(other._size);
+                _push_back_move(other.begin(), other.end());
             }
         }
 
         // Constructor.
         constexpr vector(
             std::initializer_list<T> il,
-            const Allocator& m = Allocator())
+            const Allocator& allocator = Allocator())
         :
-            vector(m)
+            vector(allocator)
         {
             assign(il);
         }
@@ -153,7 +155,7 @@ namespace gdt
         }
 
         // Assignment.
-        constexpr vector& operator=(const vector& x)
+        constexpr vector& operator=(const vector& other)
         {
             if constexpr (
                 std::allocator_traits<Allocator>::
@@ -162,61 +164,61 @@ namespace gdt
                 if constexpr (
                     !std::allocator_traits<Allocator>::is_always_equal::value)
                 {
-                    if (_allocator != x._allocator)
+                    if (_allocator != other._allocator)
                     {
                         _reset();
                     }
                 }
-                _allocator = x._allocator;
+                _allocator = other._allocator;
             }
-            assign(x.begin(), x.end());
+            assign(other.begin(), other.end());
             return *this;
         }
 
         // Assignment.
-        constexpr vector& operator=(vector&& x)
+        constexpr vector& operator=(vector&& other)
         noexcept(
             std::allocator_traits<Allocator>::
                 propagate_on_container_move_assignment::value ||
             std::allocator_traits<Allocator>::
                 is_always_equal::value)
         {
-            if (&x != this)
+            if (&other != this)
             {
                 if constexpr (
                     std::allocator_traits<Allocator>::
                         propagate_on_container_move_assignment::value)
                 {
                     _destroy_all_and_deallocate();
-                    _allocator = std::move(x._allocator);
-                    _take_buffer(x);
+                    _allocator = std::move(other._allocator);
+                    _take_buffer(other);
                 }
                 else if constexpr (
                     std::allocator_traits<Allocator>::is_always_equal::value)
                 {
                     _destroy_all_and_deallocate();
-                    _take_buffer(x);
+                    _take_buffer(other);
                 }
-                else if (_allocator == x._allocator)
+                else if (_allocator == other._allocator)
                 {
                     _destroy_all_and_deallocate();
-                    _take_buffer(x);
+                    _take_buffer(other);
                 }
                 else
                 {
                     // Element-wise move since we have a different allocator.
-                    _reserve_without_migrate(x._size);
+                    _reserve_without_migrate(other._size);
 
                     // Assign over existing elements where possible.
-                    auto src_begin = x.begin();
-                    auto src_len = std::min(_size, x._size);
+                    auto src_begin = other.begin();
+                    auto src_len = std::min(_size, other._size);
                     auto src_end = src_begin + difference_type(src_len);
                     std::move(src_begin, src_end, begin());
 
                     // Push the rest or erase the old leftovers.
-                    if (_size < x._size)
+                    if (_size < other._size)
                     {
-                        _push_back_move(src_end, x.end());
+                        _push_back_move(src_end, other.end());
                     }
                     else
                     {
@@ -246,22 +248,23 @@ namespace gdt
                 typename std::iterator_traits<InputIterator>::
                     iterator_category>)
             {
-                auto n = std::distance(first, last);
-                gdt_assert(n <= difference_type(max_size()));
-                _reserve_without_migrate(size_type(n));
+                auto src_len = std::distance(first, last);
+                gdt_assert(src_len <= difference_type(max_size()));
+                _reserve_without_migrate(size_type(src_len));
             }
 
             // Assign over existing elements where possible.
             size_type i = 0;
-            for (; i < _size && first < last; ++i, ++first)
+            auto& itr = first;
+            for (; i < _size && itr != last; ++i, ++itr)
             {
-                (*this)[i] = *first;
+                (*this)[i] = *itr;
             }
 
             // Push the rest or erase the old leftovers.
-            if (first < last)
+            if (itr != last)
             {
-                _push_back(first, last);
+                _push_back(itr, last);
             }
             else
             {
@@ -270,22 +273,22 @@ namespace gdt
         }
 
         // Assign.
-        constexpr void assign(size_type n, const T& u)
+        constexpr void assign(size_type tgt_len, const T& fill_value)
         {
-            _reserve_without_migrate(n);
+            _reserve_without_migrate(tgt_len);
 
             // Assign over existing elements where possible.
-            auto fill_len = difference_type(std::min(_size, n));
-            std::fill_n(begin(), fill_len, u);
+            auto fill_len = difference_type(std::min(_size, tgt_len));
+            std::fill_n(begin(), fill_len, fill_value);
 
             // Push the rest or erase the old leftovers.
-            if (_size < n)
+            if (_size < tgt_len)
             {
-                _fill_to(n, u);
+                _fill_to(tgt_len, fill_value);
             }
             else
             {
-                _erase_after(n);
+                _erase_after(tgt_len);
             }
         }
 
@@ -398,28 +401,28 @@ namespace gdt
         }
 
         // Resize.
-        constexpr void resize(size_type sz)
+        constexpr void resize(size_type tgt_len)
         {
-            _reserve_or_shrink(sz);
-            while (_size < sz)
+            _reserve_or_shrink(tgt_len);
+            while (_size < tgt_len)
             {
                 emplace_back();
             }
         }
 
         // Resize.
-        constexpr void resize(size_type sz, const T& c)
+        constexpr void resize(size_type tgt_len, const T& fill_value)
         {
-            _reserve_or_shrink(sz);
-            _fill_to(sz, c);
+            _reserve_or_shrink(tgt_len);
+            _fill_to(tgt_len, fill_value);
         }
 
         // Reserve.
-        constexpr void reserve(size_type n)
+        constexpr void reserve(size_type req_capacity)
         {
-            if (_capacity < n)
+            if (_capacity < req_capacity)
             {
-                _reallocate(_choose_new_capacity(n));
+                _reallocate(_choose_new_capacity(req_capacity));
             }
         }
 
@@ -433,31 +436,31 @@ namespace gdt
         }
 
         // Subscript.
-        constexpr reference operator[](size_type n)
+        constexpr reference operator[](size_type i)
         {
-            gdt_assume(n <= (std::numeric_limits<difference_type>::max)());
-            return begin()[difference_type(n)];
+            gdt_assume(i <= (std::numeric_limits<difference_type>::max)());
+            return begin()[difference_type(i)];
         }
 
         // Subscript.
-        constexpr const_reference operator[](size_type n) const
+        constexpr const_reference operator[](size_type i) const
         {
-            gdt_assume(n <= (std::numeric_limits<difference_type>::max)());
-            return begin()[difference_type(n)];
+            gdt_assume(i <= (std::numeric_limits<difference_type>::max)());
+            return begin()[difference_type(i)];
         }
 
         // At.
-        constexpr const_reference at(size_type n) const
+        constexpr const_reference at(size_type i) const
         {
-            gdt_assert(n < size());
-            return begin()[difference_type(n)];
+            gdt_assert(i < size());
+            return begin()[difference_type(i)];
         }
 
         // At.
-        constexpr reference at(size_type n)
+        constexpr reference at(size_type i)
         {
-            gdt_assert(n < size());
-            return begin()[difference_type(n)];
+            gdt_assert(i < size());
+            return begin()[difference_type(i)];
         }
 
         // Front.
@@ -509,25 +512,25 @@ namespace gdt
                 _reallocate(_choose_additional_capacity(1));
             }
 
-            T& ret = *end();
+            T& dst = *end();
             std::allocator_traits<Allocator>::construct(
-                _allocator, std::addressof(ret),
+                _allocator, std::addressof(dst),
                 std::forward<Args>(args)...);
             ++_size;
 
-            return ret;
+            return dst;
         }
 
         // Push back.
-        constexpr void push_back(const T& x)
+        constexpr void push_back(const T& value)
         {
-            emplace_back(x);
+            emplace_back(value);
         }
 
         // Push back.
-        constexpr void push_back(T&& x)
+        constexpr void push_back(T&& value)
         {
-            emplace_back(std::move(x));
+            emplace_back(std::move(value));
         }
 
         // Pop back.
@@ -559,37 +562,38 @@ namespace gdt
         }
 
         // Insert.
-        constexpr iterator insert(const_iterator position, const T& x)
+        constexpr iterator insert(const_iterator position, const T& value)
         {
-            return emplace(position, x);
+            return emplace(position, value);
         }
 
         // Insert.
-        constexpr iterator insert(const_iterator position, T&& x)
+        constexpr iterator insert(const_iterator position, T&& value)
         {
-            return emplace(position, std::move(x));
+            return emplace(position, std::move(value));
         }
 
         // Insert.
         constexpr iterator insert(
             const_iterator position,
-            size_type n,
-            const T& x)
+            size_type fill_len,
+            const T& fill_value)
         {
-            size_type needed = _size + n;
-            gdt_assert(needed >= n); // Assert no overflow.
+            size_type req_capacity = _size + fill_len;
+            gdt_assert(req_capacity >= fill_len); // Assert no overflow.
 
-            if (_capacity < needed)
+            if (_capacity < req_capacity)
             {
                 // Insert in the middle of migration to a larger buffer.
-                auto new_capacity = _choose_new_capacity(needed);
+                auto new_capacity = _choose_new_capacity(req_capacity);
                 auto new_ptr = _allocate(new_capacity);
-                return _migrate_insert(new_ptr, new_capacity, position, n, x);
+                return _migrate_insert(
+                    new_ptr, new_capacity, position, fill_len, fill_value);
             }
             else
             {
                 // Replace existing elements after making a gap.
-                return _replace_insert(position, n, x);
+                return _replace_insert(position, fill_len, fill_value);
             }
         }
 
@@ -608,34 +612,38 @@ namespace gdt
                 typename std::iterator_traits<InputIterator>::
                     iterator_category>)
             {
-                auto n = size_type(std::distance(first, last));
-                size_type needed = _size + n;
-                gdt_assert(needed >= n); // Assert no overflow.
+                auto fill_len = size_type(std::distance(first, last));
+                size_type req_capacity = _size + fill_len;
+                gdt_assert(req_capacity >= fill_len); // Assert no overflow.
 
-                if (_capacity < needed)
+                if (_capacity < req_capacity)
                 {
                     // Insert in the middle of migration to a larger buffer.
-                    auto new_capacity = _choose_new_capacity(needed);
+                    auto new_capacity = _choose_new_capacity(req_capacity);
                     auto new_ptr = _allocate(new_capacity);
                     return _migrate_insert(
-                        new_ptr, new_capacity, position, n, first);
+                        new_ptr, new_capacity, position, fill_len, first);
                 }
                 else
                 {
                     // Replace existing elements after making a gap.
-                    return _replace_insert(position, n, first, last);
+                    return _replace_insert(position, fill_len, first, last);
                 }
             }
             else
             {
                 // No way to predict how many elements.
                 // Best we can do is insert one at a time.
-                auto pidx = position - begin();
-                for (auto didx = pidx; first != last; ++first, ++didx)
+                auto& fill_itr = first;
+                auto pos_idx = position - begin();
+                for (
+                    auto dst_idx = pos_idx;
+                    fill_itr != last;
+                    ++fill_itr, ++dst_idx)
                 {
-                    insert(begin() + didx, *first);
+                    insert(begin() + dst_idx, *fill_itr);
                 }
-                return begin() + pidx;
+                return begin() + pos_idx;
             }
         }
 
@@ -657,7 +665,7 @@ namespace gdt
         constexpr iterator erase(const_iterator first, const_iterator last);
 
         // Swap.
-        constexpr void swap(vector&)
+        constexpr void swap(vector& other)
         noexcept(
             std::allocator_traits<Allocator>::
                 propagate_on_container_swap::value ||
@@ -679,15 +687,16 @@ namespace gdt
         size_type _size;
 
         // Take ownership of another vector's buffer.
-        constexpr void _take_buffer(vector& x) noexcept
+        constexpr void _take_buffer(vector& other) noexcept
         {
-            _ptr = std::exchange(x._ptr, nullptr);
-            _capacity = std::exchange(x._capacity, 0);
-            _size = std::exchange(x._size, 0);
+            _ptr = std::exchange(other._ptr, nullptr);
+            _capacity = std::exchange(other._capacity, 0);
+            _size = std::exchange(other._size, 0);
         }
 
-        // Choose a new capacity >= `n`.
-        constexpr size_type _choose_new_capacity(size_type n) noexcept
+        // Choose a new capacity >= `req_capacity`.
+        constexpr size_type _choose_new_capacity(size_type req_capacity)
+        noexcept
         {
             auto max_capacity = max_size();
             auto capacity_x2 = size_type(_capacity * 2);
@@ -696,7 +705,7 @@ namespace gdt
                 capacity_x2 = max_capacity;
             }
 
-            return std::max(n, capacity_x2);
+            return std::max(req_capacity, capacity_x2);
         }
 
         // Choose a new capacity >= `size() + n`.
@@ -734,7 +743,7 @@ namespace gdt
             }
         }
 
-        // Move `size()` elements to a new buffer with the given capacity.
+        // Move to a new buffer with the given capacity.
         constexpr void _reallocate(size_type new_capacity)
         {
             gdt_assume(new_capacity >= _size);
@@ -748,24 +757,25 @@ namespace gdt
             _capacity = new_capacity;
         }
 
-        // Reserve at least `sz` capacity. Shrink to `sz` if necessary.
-        constexpr void _reserve_or_shrink(size_type sz)
+        // Reserve at least `tgt_len` capacity.
+        // Shrink to `tgt_len` if necessary.
+        constexpr void _reserve_or_shrink(size_type tgt_len)
         {
-            reserve(sz);
-            while (_size > sz)
+            reserve(tgt_len);
+            while (_size > tgt_len)
             {
                 pop_back();
             }
         }
 
-        // Reserve at least `sz` capacity.
+        // Reserve at least `tgt_len` capacity.
         // Don't bother to migrate on reallocation.
-        constexpr void _reserve_without_migrate(size_type sz)
+        constexpr void _reserve_without_migrate(size_type tgt_len)
         {
-            if (_capacity < sz)
+            if (_capacity < tgt_len)
             {
                 _reset();
-                reserve(sz);
+                reserve(tgt_len);
             }
         }
 
@@ -789,12 +799,12 @@ namespace gdt
             }
         }
 
-        // Grow `size()` to at least `sz` using `c` for new elements.
-        constexpr void _fill_to(size_type sz, const T& c)
+        // Grow to at least `tgt_len` using `fill_value` for new elements.
+        constexpr void _fill_to(size_type tgt_len, const T& fill_value)
         {
-            while (_size < sz)
+            while (_size < tgt_len)
             {
-                push_back(c);
+                push_back(fill_value);
             }
         }
 
@@ -811,19 +821,20 @@ namespace gdt
 
             auto old_begin = begin();
             auto new_begin = iterator(new_ptr);
-            auto pidx = position - old_begin;
+            auto pos_idx = position - old_begin;
 
             // Migrate up to position.
-            _migrate(new_begin, old_begin, size_type(pidx));
+            _migrate(new_begin, old_begin, size_type(pos_idx));
 
             // Emplace at position.
-            auto ret = new_begin + pidx;
+            auto dst = new_begin + pos_idx;
             std::allocator_traits<Allocator>::construct(
-                _allocator, std::addressof(*ret),
+                _allocator, std::addressof(*dst),
                 std::forward<Args>(args)...);
 
             // Migrate after position.
-            _migrate(ret + 1, old_begin + pidx, size_type(_size - pidx));
+            auto migrate_len = size_type(_size - size_type(pos_idx));
+            _migrate(dst + 1, old_begin + pos_idx, migrate_len);
 
             // Free the old buffer and use the new buffer.
             std::allocator_traits<Allocator>::deallocate(
@@ -833,7 +844,7 @@ namespace gdt
             _size += 1;
 
             // Done.
-            return ret;
+            return dst;
         }
 
         // Migrate to a new buffer with inserts in the middle.
@@ -841,37 +852,38 @@ namespace gdt
             pointer new_ptr,
             size_type new_capacity,
             const_iterator position,
-            size_type n,
-            const T& x)
+            size_type fill_len,
+            const T& fill_value)
         noexcept // `noexcept` is important here!
         {
             gdt_assume(new_capacity > _size);
 
             auto old_begin = begin();
             auto new_begin = iterator(new_ptr);
-            auto pidx = position - old_begin;
+            auto pos_idx = position - old_begin;
 
             // Migrate up to position.
-            _migrate(new_begin, old_begin, size_type(pidx));
+            _migrate(new_begin, old_begin, size_type(pos_idx));
 
             // Insert at position.
-            auto ret = new_begin + pidx;
-            auto dst = ret;
-            for (; n > 0; ++dst, --n)
+            auto dst = new_begin + pos_idx;
+            auto ret = dst;
+            for (; fill_len > 0; --fill_len, ++dst)
             {
                 std::allocator_traits<Allocator>::construct(
-                    _allocator, std::addressof(*dst), x);
+                    _allocator, std::addressof(*dst), fill_value);
             }
 
             // Migrate after position.
-            _migrate(dst, old_begin + pidx, size_type(_size - pidx));
+            auto migrate_len = size_type(_size - size_type(pos_idx));
+            _migrate(dst, old_begin + pos_idx, migrate_len);
 
             // Free the old buffer and use the new buffer.
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
             _ptr = new_ptr;
             _capacity = new_capacity;
-            _size += 1;
+            _size += fill_len;
 
             // Done.
             return ret;
@@ -883,38 +895,38 @@ namespace gdt
             pointer new_ptr,
             size_type new_capacity,
             const_iterator position,
-            size_type n,
-            InputIterator itr)
+            size_type fill_len,
+            InputIterator fill_itr)
         noexcept // `noexcept` is important here!
         {
             gdt_assume(new_capacity > _size);
 
             auto old_begin = begin();
             auto new_begin = iterator(new_ptr);
-            auto pidx = position - old_begin;
+            auto pos_idx = position - old_begin;
 
             // Migrate up to position.
-            _migrate(new_begin, old_begin, size_type(pidx));
+            _migrate(new_begin, old_begin, size_type(pos_idx));
 
             // Insert at position.
-            auto ret = new_begin + pidx;
-            auto dst = ret;
-            for (; n > 0; ++dst, --n)
+            auto dst = new_begin + pos_idx;
+            auto ret = dst;
+            for (; fill_len > 0; --fill_len, ++dst)
             {
                 std::allocator_traits<Allocator>::construct(
-                    _allocator, std::addressof(*dst), *itr);
-                ++itr;
+                    _allocator, std::addressof(*dst), *fill_itr++);
             }
 
             // Migrate after position.
-            _migrate(dst, old_begin + pidx, size_type(_size - pidx));
+            auto migrate_len = size_type(_size - size_type(pos_idx));
+            _migrate(dst, old_begin + pos_idx, migrate_len);
 
             // Free the old buffer and use the new buffer.
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
             _ptr = new_ptr;
             _capacity = new_capacity;
-            _size += 1;
+            _size += fill_len;
 
             // Done.
             return ret;
@@ -939,159 +951,160 @@ namespace gdt
         {
             gdt_assume(_capacity > _size);
 
-            auto last = end();
-            if (position == last)
+            auto old_end = end();
+            if (position == old_end)
             {
                 // Emplace at the end.
                 std::allocator_traits<Allocator>::construct(
-                    _allocator, std::addressof(*last),
+                    _allocator, std::addressof(*old_end),
                     std::forward<Args>(args)...);
                 ++_size;
-                return last;
+                return old_end;
             }
             else
             {
                 // Move all elements >= `position` back one index.
-                auto last_m1 = last - 1;
+                auto old_end_m1 = old_end - 1;
                 std::allocator_traits<Allocator>::construct(
-                    _allocator, std::addressof(*last),
-                    std::move(*last_m1));
+                    _allocator, std::addressof(*old_end),
+                    std::move(*old_end_m1));
                 ++_size;
 
-                auto first = begin();
-                auto ret = position - first + first;
-                std::move_backward(ret, last_m1, last);
+                auto beg = begin();
+                auto dst = position - beg + beg;
+                std::move_backward(dst, old_end_m1, old_end);
 
                 // Replace the element at `position`.
-                _replace(std::addressof(*ret), std::forward<Args>(args)...);
+                _replace(std::addressof(*dst), std::forward<Args>(args)...);
 
                 // Done.
-                return ret;
+                return dst;
             }
         }
 
         // Insert in the existing buffer.
         constexpr iterator _replace_insert(
             const_iterator position,
-            size_type n,
-            const T& x)
+            size_type fill_len,
+            const T& fill_value)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(size_type(_size + n) >= n);
+            gdt_assume(size_type(_size + fill_len) >= fill_len);
             auto old_end = end();
 
-            // Move all elements >= `position` back `n` indices.
-            auto m = n;
+            // Move all elements >= `position` back `fill_len` indices.
             auto src = old_end;
-            for (; m > 0 && src > position; --m)
+            for (auto rem = fill_len; rem > 0 && src > position; --rem)
             {
                 --src;
-                auto dst = src + n;
+                auto dst = src + fill_len;
                 std::allocator_traits<Allocator>::construct(
                     _allocator, std::addressof(*dst), std::move(*src));
             }
 
-            auto first = begin();
-            auto ret = position - first + first;
-            std::move_backward(ret, src, src + n);
+            auto beg = begin();
+            auto pos = position - beg + beg;
+            std::move_backward(pos, src, src + fill_len);
 
             // Copy-construct elements past the end of the old array.
-            auto dst = ret + n;
-            while (dst > old_end && dst > position)
+            auto dst = pos + fill_len;
+            while (dst > old_end && dst > pos)
             {
-                --dst;
                 std::allocator_traits<Allocator>::construct(
-                    _allocator, std::addressof(*dst), x);
+                    _allocator, std::addressof(*--dst), fill_value);
             }
-            _size += n;
 
             // Copy-assign elements inside the old array.
-            while (dst > position)
+            while (dst > pos)
             {
-                *--dst = x;
+                *--dst = fill_value;
             }
 
             // Done.
-            return ret;
+            _size += fill_len;
+            return pos;
         }
 
         // Insert in the existing buffer.
         template<typename InputIterator>
         constexpr iterator _replace_insert(
             const_iterator position,
-            size_type n,
-            InputIterator x_first,
-            InputIterator x_last)
+            size_type fill_len,
+            InputIterator fill_begin,
+            InputIterator fill_end)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(size_type(_size + n) >= n);
+            gdt_assume(size_type(_size + fill_len) >= fill_len);
             auto old_end = end();
 
-            // Move all elements >= `position` back `n` indices.
-            auto m = n;
+            // Move all elements >= `position` back `fill_len` indices.
             auto src = old_end;
-            for (; m > 0 && src > position; --m)
+            for (auto rem = fill_len; rem > 0 && src > position; --rem)
             {
                 --src;
-                auto dst = src + n;
+                auto dst = src + fill_len;
                 std::allocator_traits<Allocator>::construct(
                     _allocator, std::addressof(*dst), std::move(*src));
             }
 
-            auto first = begin();
-            auto ret = position - first + first;
-            std::move_backward(ret, src, src + n);
+            auto beg = begin();
+            auto pos = position - beg + beg;
+            std::move_backward(pos, src, src + fill_len);
 
             if constexpr (std::is_base_of_v<
                 std::bidirectional_iterator_tag,
                 typename std::iterator_traits<InputIterator>::
                     iterator_category>)
             {
+                auto& fill_itr = fill_end;
+
                 // Copy-construct elements past the end of the old array.
-                auto dst = ret + n;
-                while (dst > old_end && dst > position)
+                auto dst = pos + fill_len;
+                while (dst > old_end && dst > pos)
                 {
                     std::allocator_traits<Allocator>::construct(
-                        _allocator, std::addressof(*--dst), *--x_last);
+                        _allocator, std::addressof(*--dst), *--fill_itr);
                 }
 
                 // Copy-assign elements inside the old array.
-                while (dst > position)
+                while (dst > pos)
                 {
-                    *--dst = *--x_last;
+                    *--dst = *--fill_itr;
                 }
             }
             else
             {
+                auto& fill_itr = fill_begin;
+
                 // Copy-assign elements inside the old array.
-                auto dst = ret;
-                auto copy_end = ret + n;
-                while (dst < old_end && dst < copy_end)
+                auto dst = pos;
+                auto dst_end = pos + fill_len;
+                while (dst < old_end && dst < dst_end)
                 {
-                    *dst++ = *x_first++;
+                    *dst++ = *fill_itr++;
                 }
 
                 // Copy-construct elements past the end of the old array.
-                while (dst < copy_end)
+                while (dst < dst_end)
                 {
                     std::allocator_traits<Allocator>::construct(
-                        _allocator, std::addressof(*dst++), *x_first++);
+                        _allocator, std::addressof(*dst++), *fill_itr++);
                 }
             }
 
             // Done.
-            _size += n;
-            return ret;
+            _size += fill_len;
+            return pos;
         }
 
-        // Destroy all.
-        constexpr void _destroy(size_type first, size_type last)
+        // Destroy from `i` to `j`.
+        constexpr void _destroy(size_type i, size_type j)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(first <= last);
-            gdt_assume(last <= _size);
+            gdt_assume(i <= j);
+            gdt_assume(j <= _size);
 
-            for (auto i = first; i < last; ++i)
+            for (; i < j; ++i)
             {
                 std::allocator_traits<Allocator>::destroy(
                     _allocator, std::addressof((*this)[i]));
