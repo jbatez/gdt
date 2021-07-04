@@ -3,6 +3,7 @@
 #include "allocator.hxx"
 #include "assert.hxx"
 #include "assume.hxx"
+#include <algorithm>
 #include <compare>
 #include <initializer_list>
 #include <iterator>
@@ -115,19 +116,19 @@ namespace gdt
         :
             vector(m)
         {
-            if (_allocator == x._allocator)
+            if constexpr (
+                std::allocator_traits<Allocator>::is_always_equal::value)
             {
-                _ptr = std::exchange(x._ptr, nullptr);
-                _capacity = std::exchange(x._capacity, 0);
-                _size = std::exchange(x._size, 0);
+                _take_buffer(x);
+            }
+            else if (_allocator == x._allocator)
+            {
+                _take_buffer(x);
             }
             else
             {
-                reserve(x.size());
-                for (auto& e : x)
-                {
-                    push_back(std::move(e));
-                }
+                reserve(x._size);
+                _push_back_move(x.begin(), x.end());
             }
         }
 
@@ -150,17 +151,22 @@ namespace gdt
         // Assignment.
         constexpr vector& operator=(const vector& x)
         {
-            if (std::allocator_traits<Allocator>::
-                    propagate_on_container_copy_assignment::value &&
-                _allocator != x._allocator)
+            if constexpr (
+                std::allocator_traits<Allocator>::
+                    propagate_on_container_copy_assignment::value)
             {
-                _destroy_all_and_deallocate();
+                if constexpr (
+                    !std::allocator_traits<Allocator>::is_always_equal::value)
+                {
+                    if (_allocator != x._allocator)
+                    {
+                        _reset();
+                    }
+                }
                 _allocator = x._allocator;
-                _ptr = nullptr;
-                _capacity = 0;
-                _size = 0;
             }
             assign(x.begin(), x.end());
+            return *this;
         }
 
         // Assignment.
@@ -169,7 +175,48 @@ namespace gdt
             std::allocator_traits<Allocator>::
                 propagate_on_container_move_assignment::value ||
             std::allocator_traits<Allocator>::
-                is_always_equal::value);
+                is_always_equal::value)
+        {
+            if (&x != this)
+            {
+                if constexpr (
+                    std::allocator_traits<Allocator>::
+                        propagate_on_container_move_assignment::value)
+                {
+                    _destroy_all_and_deallocate();
+                    _allocator = std::move(x._allocator);
+                    _take_buffer(x);
+                }
+                else if constexpr (
+                    std::allocator_traits<Allocator>::is_always_equal::value)
+                {
+                    _destroy_all_and_deallocate();
+                    _take_buffer(x);
+                }
+                else if (_allocator == x._allocator)
+                {
+                    _destroy_all_and_deallocate();
+                    _take_buffer(x);
+                }
+                else
+                {
+                    _reserve_exact_without_move(x._size);
+                    auto move_len = std::min(_size, x._size);
+                    std::move(x.begin(), x.begin() + move_len, begin());
+
+                    if (_size < x._size)
+                    {
+                        _push_back_move(x.begin() + _size, x.end());
+                    }
+                    else if (_size > x._size)
+                    {
+                        _destroy(x._size, _size);
+                        _size = x._size;
+                    }
+                }
+            }
+            return *this;
+        }
 
         // Assignment.
         constexpr vector& operator=(std::initializer_list<T> il)
@@ -465,7 +512,7 @@ namespace gdt
         // Clear.
         constexpr void clear() noexcept
         {
-            _destroy_all();
+            _destroy(0, _size);
             _size = 0;
         }
 
@@ -475,6 +522,14 @@ namespace gdt
         pointer _ptr;
         size_type _capacity;
         size_type _size;
+
+        // Take buffer.
+        constexpr void _take_buffer(vector& x)
+        {
+            _ptr = std::exchange(x._ptr, nullptr);
+            _capacity = std::exchange(x._capacity, 0);
+            _size = std::exchange(x._size, 0);
+        }
 
         // Reserve or shrink.
         constexpr void _reserve_or_shrink(size_type sz)
@@ -486,23 +541,51 @@ namespace gdt
             }
         }
 
-        // Destroy all.
-        constexpr void _destroy_all()
+        // Reserve exact without move.
+        constexpr void _reserve_exact_without_move(size_type sz)
         {
-            auto rend = this->rend();
-            for (auto itr = rbegin(); itr != rend; itr++)
+            if (_capacity < sz)
+            {
+                _reset();
+                reserve(sz);
+            }
+        }
+
+        // Push back move.
+        template<typename InputIterator>
+        void _push_back_move(InputIterator first, InputIterator last)
+        {
+            for (auto itr = first; itr != last; ++itr)
+            {
+                push_back(std::move(*itr));
+            }
+        }
+
+        // Destroy all.
+        constexpr void _destroy(size_type first, size_type last)
+        {
+            for (auto i = first; i < last; ++i)
             {
                 std::allocator_traits<Allocator>::destroy(
-                    _allocator, std::addressof(*itr));
+                    _allocator, std::addressof((*this)[i]));
             }
         }
 
         // Destroy all and deallocate.
         constexpr void _destroy_all_and_deallocate()
         {
-            _destroy_all();
+            _destroy(0, _size);
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
+        }
+
+        // Reset.
+        constexpr void _reset()
+        {
+            _destroy_all_and_deallocate();
+            _ptr = nullptr;
+            _capacity = 0;
+            _size = 0;
         }
     };
 
