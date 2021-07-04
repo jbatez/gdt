@@ -627,7 +627,7 @@ namespace gdt
             pointer new_ptr = nullptr;
             if (new_capacity > 0)
             {
-                auto new_ptr = std::allocator_traits<Allocator>::allocate(
+                new_ptr = std::allocator_traits<Allocator>::allocate(
                     _allocator, new_capacity);
             }
 
