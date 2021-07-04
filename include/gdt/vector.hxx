@@ -408,8 +408,6 @@ namespace gdt
             if (_capacity < n)
             {
                 auto max_capacity = max_size();
-                gdt_assert(n <= max_capacity);
-
                 auto capacity_x2 = _capacity * 2;
                 if (capacity_x2 < _capacity || capacity_x2 > max_capacity)
                 {
@@ -601,33 +599,29 @@ namespace gdt
             _size = std::exchange(x._size, 0);
         }
 
-        // Migrate to.
-        constexpr void _migrate_to(pointer dst, size_type dst_capacity)
+        // Migrate.
+        constexpr void _migrate(iterator dst, iterator src, size_type n)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(dst_capacity >= _size);
-
-            for (auto& e : *this)
+            for (; n > 0; ++dst, ++src, --n)
             {
                 std::allocator_traits<Allocator>::construct(
-                    _allocator, std::to_address(dst), std::move(e));
+                    _allocator, std::addressof(*dst), std::move(*src));
                 std::allocator_traits<Allocator>::destroy(
-                    _allocator, std::addressof(e));
+                    _allocator, std::addressof(*src));
             }
-            std::allocator_traits<Allocator>::deallocate(
-                _allocator, _ptr, _capacity);
-
-            _ptr = dst;
-            _capacity = dst_capacity;
         }
 
         // Reallocate.
         constexpr void _reallocate(size_type new_capacity)
         {
-            // It's important to keep _migrate_to and _reallocate separate.
-            // We want allocation but not migration exceptions to propagate.
-            _migrate_to(std::allocator_traits<Allocator>::allocate(
+            auto new_ptr = std::allocator_traits<Allocator>::allocate(
                 _allocator, new_capacity));
+
+            gdt_assume(new_capacity >= _size);
+            _migrate(iterator(new_ptr), begin(), _size);
+            _ptr = new_ptr;
+            _capacity = new_capacity;
         }
 
         // Reserve or shrink.
