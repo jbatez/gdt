@@ -9,6 +9,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace gdt_detail
@@ -201,12 +202,13 @@ namespace gdt
                 else
                 {
                     _reserve_exact_without_move(x._size);
-                    auto move_len = std::min(_size, x._size);
+                    auto move_len = difference_type(std::min(_size, x._size));
                     std::move(x.begin(), x.begin() + move_len, begin());
 
                     if (_size < x._size)
                     {
-                        _push_back_move(x.begin() + _size, x.end());
+                        auto first = x.begin() + difference_type(_size);
+                        _push_back_move(first, x.end());
                     }
                     else if (_size > x._size)
                     {
@@ -227,10 +229,53 @@ namespace gdt
 
         // Assign.
         template<typename InputIterator>
-        constexpr void assign(InputIterator first, InputIterator last);
+        constexpr void assign(InputIterator first, InputIterator last)
+        {
+            if constexpr (
+                std::is_base_of_v<
+                    std::random_access_iterator_tag,
+                    typename std::iterator_traits<InputIterator>::
+                        iterator_category>)
+            {
+                auto n = last - first;
+                gdt_assert(n <= difference_type(max_size()));
+                _reserve_exact_without_move(size_type(n));
+            }
+
+            size_type i = 0;
+            auto itr = first;
+
+            for (; i < _size && itr != last; ++i, ++itr)
+            {
+                (*this)[i] = *itr;
+            }
+
+            for (; itr != last; ++itr)
+            {
+                push_back(*itr);
+            }
+
+            _destroy(i, _size);
+            _size = i;
+        }
 
         // Assign.
-        constexpr void assign(size_type n, const T& u);
+        constexpr void assign(size_type n, const T& u)
+        {
+            _reserve_exact_without_move(n);
+            auto fill_len = difference_type(std::min(_size, n));
+            std::fill_n(begin(), fill_len, u);
+
+            if (_size < n)
+            {
+                _fill_to(n, u);
+            }
+            else if (_size > n)
+            {
+                _destroy(n, _size);
+                _size = n;
+            }
+        }
 
         // Assign.
         constexpr void assign(std::initializer_list<T> il)
@@ -354,10 +399,7 @@ namespace gdt
         constexpr void resize(size_type sz, const T& c)
         {
             _reserve_or_shrink(sz);
-            while (_size < sz)
-            {
-                push_back(c);
-            }
+            _fill_to(sz, c);
         }
 
         // Reserve.
@@ -553,11 +595,20 @@ namespace gdt
 
         // Push back move.
         template<typename InputIterator>
-        void _push_back_move(InputIterator first, InputIterator last)
+        constexpr void _push_back_move(InputIterator first, InputIterator last)
         {
             for (auto itr = first; itr != last; ++itr)
             {
                 push_back(std::move(*itr));
+            }
+        }
+
+        // Fill to.
+        constexpr void _fill_to(size_type sz, const T& c)
+        {
+            while (_size < sz)
+            {
+                push_back(c);
             }
         }
 
