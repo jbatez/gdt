@@ -80,6 +80,9 @@ namespace gdt
 
         // Constructor.
         template<typename InputIterator>
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         constexpr vector(
             InputIterator first,
             InputIterator last,
@@ -229,6 +232,9 @@ namespace gdt
 
         // Assign.
         template<typename InputIterator>
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         constexpr void assign(InputIterator first, InputIterator last)
         {
             if constexpr (
@@ -550,6 +556,9 @@ namespace gdt
 
         // Insert.
         template<typename InputIterator>
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         constexpr iterator insert(
             const_iterator position,
             InputIterator first,
@@ -615,8 +624,12 @@ namespace gdt
         // Reallocate.
         constexpr void _reallocate(size_type new_capacity)
         {
-            auto new_ptr = std::allocator_traits<Allocator>::allocate(
-                _allocator, new_capacity);
+            pointer new_ptr = nullptr;
+            if (new_capacity > 0)
+            {
+                auto new_ptr = std::allocator_traits<Allocator>::allocate(
+                    _allocator, new_capacity);
+            }
 
             gdt_assume(new_capacity >= _size);
             _migrate(iterator(new_ptr), begin(), _size);
