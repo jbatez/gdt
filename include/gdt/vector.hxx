@@ -243,16 +243,14 @@ namespace gdt
             }
 
             size_type i = 0;
-            auto itr = first;
-
-            for (; i < _size && itr != last; ++i, ++itr)
+            for (; i < _size && first != last; ++i, ++first)
             {
-                (*this)[i] = *itr;
+                (*this)[i] = *first;
             }
 
-            if (itr != last)
+            if (first != last)
             {
-                _push_back(itr, last);
+                _push_back(first, last);
             }
             else
             {
@@ -618,7 +616,7 @@ namespace gdt
         constexpr void _reallocate(size_type new_capacity)
         {
             auto new_ptr = std::allocator_traits<Allocator>::allocate(
-                _allocator, new_capacity));
+                _allocator, new_capacity);
 
             gdt_assume(new_capacity >= _size);
             _migrate(iterator(new_ptr), begin(), _size);
@@ -658,9 +656,9 @@ namespace gdt
         template<typename InputIterator>
         constexpr void _push_back(InputIterator first, InputIterator last)
         {
-            for (auto itr = first; itr != last; ++itr)
+            for (; first != last; ++first)
             {
-                push_back(*itr);
+                push_back(*first);
             }
         }
 
@@ -668,9 +666,9 @@ namespace gdt
         template<typename InputIterator>
         constexpr void _push_back_move(InputIterator first, InputIterator last)
         {
-            for (auto itr = first; itr != last; ++itr)
+            for (; first != last; ++first)
             {
-                push_back(std::move(*itr));
+                push_back(std::move(*first));
             }
         }
 
