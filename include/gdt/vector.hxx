@@ -411,8 +411,8 @@ namespace gdt
         {
             if (_capacity < n)
             {
-                auto max_capacity = max_size();
-                auto capacity_x2 = _capacity * 2;
+                size_type max_capacity = max_size();
+                size_type capacity_x2 = _capacity * 2;
                 if (capacity_x2 < _capacity || capacity_x2 > max_capacity)
                 {
                     capacity_x2 = max_capacity;
@@ -624,6 +624,8 @@ namespace gdt
         // Reallocate.
         constexpr void _reallocate(size_type new_capacity)
         {
+            gdt_assume(new_capacity >= _size);
+
             pointer new_ptr = nullptr;
             if (new_capacity > 0)
             {
@@ -631,8 +633,10 @@ namespace gdt
                     _allocator, new_capacity);
             }
 
-            gdt_assume(new_capacity >= _size);
             _migrate(iterator(new_ptr), begin(), _size);
+            std::allocator_traits<Allocator>::deallocate(
+                _allocator, _ptr, _capacity);
+
             _ptr = new_ptr;
             _capacity = new_capacity;
         }
@@ -660,9 +664,9 @@ namespace gdt
         // Reserve additional.
         constexpr void _reserve_additional(size_type n)
         {
-            auto required = _size + n;
-            gdt_assert(required >= _size);
-            reserve(required);
+            n += size;
+            gdt_assert(n >= size());
+            reserve(n);
         }
 
         // Push back.
@@ -842,7 +846,7 @@ namespace gdt_detail
             typename vector<T, Allocator>::difference_type n)
         {
             r._ptr += _ptr_diff(n);
-            return *r;
+            return r;
         }
 
         // Subtraction assignment.
@@ -851,7 +855,7 @@ namespace gdt_detail
             typename vector<T, Allocator>::difference_type n)
         {
             r._ptr -= _ptr_diff(n);
-            return *r;
+            return r;
         }
 
         // Equality.
@@ -1008,7 +1012,7 @@ namespace gdt_detail
             typename vector<T, Allocator>::difference_type n)
         {
             r._ptr += _ptr_diff(n);
-            return *r;
+            return r;
         }
 
         // Subtraction assignment.
@@ -1017,7 +1021,7 @@ namespace gdt_detail
             typename vector<T, Allocator>::difference_type n)
         {
             r._ptr -= _ptr_diff(n);
-            return *r;
+            return r;
         }
 
         // Equality.
