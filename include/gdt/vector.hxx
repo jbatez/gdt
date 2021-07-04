@@ -499,7 +499,14 @@ namespace gdt
 
         // Emplace back.
         template<typename... Args>
-        constexpr reference emplace_back(Args&&... args);
+        constexpr reference emplace_back(Args&&... args)
+        {
+            _reserve_additional(1);
+            std::allocator_traits<Allocator>::construct(
+                _allocator, std::addressof(*end()),
+                std::forward<Args>(args)...);
+            ++_size;
+        }
 
         // Push back.
         constexpr void push_back(const T& x)
@@ -641,6 +648,14 @@ namespace gdt
                 _reset();
                 reserve(sz);
             }
+        }
+
+        // Reserve additional.
+        constexpr void _reserve_additional(size_type n)
+        {
+            auto required = _size + n;
+            gdt_assert(required >= _size);
+            reserve(required);
         }
 
         // Push back.
