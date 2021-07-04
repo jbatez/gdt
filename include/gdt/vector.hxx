@@ -505,12 +505,17 @@ namespace gdt
         template<typename... Args>
         constexpr reference emplace_back(Args&&... args)
         {
-            _reallocate(_choose_additional_capacity(1));
+            if (_capacity == _size)
+            {
+                _reallocate(_choose_additional_capacity(1));
+            }
+
             T& ret = *end();
             std::allocator_traits<Allocator>::construct(
                 _allocator, std::addressof(ret),
                 std::forward<Args>(args)...);
             ++_size;
+
             return ret;
         }
 
@@ -538,7 +543,7 @@ namespace gdt
         template<typename... Args>
         constexpr iterator emplace(const_iterator position, Args&&... args)
         {
-            if (_size == _capacity)
+            if (_capacity == _size)
             {
                 // Emplace in the middle of migration to a larger buffer.
                 auto new_capacity = _choose_additional_capacity(1);
@@ -575,7 +580,7 @@ namespace gdt
             size_type needed = _size + n;
             gdt_assert(needed >= n); // Assert no overflow.
 
-            if (needed > _capacity)
+            if (_capacity < needed)
             {
                 // Insert in the middle of migration to a larger buffer.
                 auto new_capacity = _choose_new_capacity(needed);
@@ -910,8 +915,8 @@ namespace gdt
                     _allocator, std::addressof(*dst), std::move(*src));
             }
 
-            auto ret = src - m;
-            gdt_assume(ret == position);
+            auto first = begin();
+            auto ret = position - first + first;
             std::move_backward(ret, src, src + n);
 
             // Copy-construct elements past the end of the old array.
