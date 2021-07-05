@@ -790,11 +790,6 @@ namespace gdt
         size_type _capacity;
         size_type _size;
 
-        // Erase if.
-        template<typename VT, typename VAllocator, typename Pred>
-        friend constexpr typename std::vector<VT, VAllocator>::size_type
-        erase_if(std::vector<VT, VAllocator>& v, Pred pred);
-
         // Take ownership of another vector's buffer.
         constexpr void _take_buffer(vector& other)
         noexcept // `noexcept` is important here!
@@ -1221,21 +1216,30 @@ namespace gdt
     vector<typename std::iterator_traits<InputIterator>::value_type, Allocator>;
 
     // Erase.
-    template<typename VT, typename VAllocator, typename U>
-    constexpr typename std::vector<VT, VAllocator>::size_type
-    erase(std::vector<VT, VAllocator>& v, const U& value)
+    template<typename T, typename Allocator, typename U>
+    constexpr typename vector<T, Allocator>::size_type
+    erase(vector<T, Allocator>& v, const U& value)
     {
-        return erase_if(v, [&value](const VT& e){e == value;});
+        auto old_end = v.end();
+        auto new_end = std::remove(v.begin(), old_end, value);
+        using size_type = typename vector<T, Allocator>::size_type;
+        auto count = size_type(old_end - new_end);
+        v.erase(new_end, old_end);
+        return count;
     }
 
     // Erase if.
-    template<typename VT, typename VAllocator, typename Pred>
-    constexpr typename std::vector<VT, VAllocator>::size_type
-    erase_if(std::vector<VT, VAllocator>& v, Pred pred)
+    template<typename T, typename Allocator, typename Pred>
+    constexpr typename vector<T, Allocator>::size_type
+    erase_if(vector<T, Allocator>& v, Pred&& pred)
     {
-        // TODO
-        static_cast<void>(v);
-        static_cast<void>(pred);
+        auto beg = v.begin();
+        auto old_end = v.end();
+        auto new_end = std::remove_if(beg, old_end, std::forward<Pred>(pred));
+        using size_type = typename vector<T, Allocator>::size_type;
+        auto count = size_type(old_end - new_end);
+        v.erase(new_end, old_end);
+        return count;
     }
 }
 
