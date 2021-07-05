@@ -697,7 +697,7 @@ namespace gdt
         size_type _size;
 
         // Take ownership of another vector's buffer.
-        constexpr void _take_buffer(vector& other) noexcept
+        constexpr void _take_buffer(vector& other)
         {
             _ptr = std::exchange(other._ptr, nullptr);
             _capacity = std::exchange(other._capacity, 0);
@@ -706,7 +706,6 @@ namespace gdt
 
         // Choose a new capacity >= `req_capacity`.
         constexpr size_type _choose_new_capacity(size_type req_capacity)
-        noexcept
         {
             auto max_capacity = max_size();
             auto capacity_x2 = size_type(_capacity * 2);
@@ -740,8 +739,8 @@ namespace gdt
             }
         }
 
-        // Deallocate current buffer.
-        constexpr void _deallocate() noexcept
+        // Deallocate the current buffer.
+        constexpr void _deallocate()
         {
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
@@ -836,6 +835,46 @@ namespace gdt
             }
         }
 
+        // The start of a migrate insertion.
+        constexpr iterator _start_migrate_insert(
+            pointer new_ptr,
+            size_type new_capacity,
+            const_iterator position,
+            size_type fill_len)
+        {
+            gdt_assume(size_type(_size + fill_len) >= fill_len);
+            gdt_assume(size_type(_size + fill_len) <= new_capacity);
+
+            auto old_begin = begin();
+            auto new_begin = iterator(new_ptr);
+            auto pos_idx = position - old_begin;
+            _migrate(new_begin, old_begin, size_type(pos_idx));
+            return new_begin + pos_idx;
+        }
+
+        // The end of a migrate insertion.
+        constexpr iterator _end_migrate_insert(
+            pointer new_ptr,
+            size_type new_capacity,
+            const_iterator position,
+            size_type fill_len)
+        {
+            auto old_begin = begin();
+            auto pos_idx = position - old_begin;
+            auto pos = iterator(new_ptr) + pos_idx;
+            auto migrate_src = old_begin + pos_idx;
+            auto migrate_dst = pos + difference_type(fill_len);
+            auto migrate_len = size_type(_size - size_type(pos_idx));
+            _migrate(migrate_dst, migrate_src, migrate_len);
+
+            _deallocate();
+            _ptr = new_ptr;
+            _capacity = new_capacity;
+            _size += 1;
+
+            return pos;
+        }
+
         // Migrate to a new buffer with an emplace in the middle.
         template<typename... Args>
         constexpr iterator _migrate_emplace(
@@ -845,31 +884,11 @@ namespace gdt
             Args&&... args)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(new_capacity > _size);
+            auto dst = _start_migrate_insert(
+                new_ptr, new_capacity, position, 1);
 
-            auto old_begin = begin();
-            auto new_begin = iterator(new_ptr);
-            auto pos_idx = position - old_begin;
-
-            // Migrate up to position.
-            _migrate(new_begin, old_begin, size_type(pos_idx));
-
-            // Emplace at position.
-            auto dst = new_begin + pos_idx;
             _construct(std::addressof(*dst), std::forward<Args>(args)...);
-
-            // Migrate after position.
-            auto migrate_len = size_type(_size - size_type(pos_idx));
-            _migrate(dst + 1, old_begin + pos_idx, migrate_len);
-
-            // Free the old buffer and use the new buffer.
-            _deallocate();
-            _ptr = new_ptr;
-            _capacity = new_capacity;
-            _size += 1;
-
-            // Done.
-            return dst;
+            return _end_migrate_insert(new_ptr, new_capacity, position, 1);
         }
 
         // Migrate to a new buffer with inserts in the middle.
@@ -881,35 +900,16 @@ namespace gdt
             const T& fill_value)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(new_capacity > _size);
+            auto dst = _start_migrate_insert(
+                new_ptr, new_capacity, position, fill_len);
 
-            auto old_begin = begin();
-            auto new_begin = iterator(new_ptr);
-            auto pos_idx = position - old_begin;
-
-            // Migrate up to position.
-            _migrate(new_begin, old_begin, size_type(pos_idx));
-
-            // Insert at position.
-            auto dst = new_begin + pos_idx;
-            auto ret = dst;
-            for (; fill_len > 0; --fill_len, ++dst)
+            for (auto rem = fill_len; rem > 0; --rem, ++dst)
             {
-                construct(std::addressof(*dst), fill_value);
+                _construct(std::addressof(*dst), fill_value);
             }
 
-            // Migrate after position.
-            auto migrate_len = size_type(_size - size_type(pos_idx));
-            _migrate(dst, old_begin + pos_idx, migrate_len);
-
-            // Free the old buffer and use the new buffer.
-            _deallocate();
-            _ptr = new_ptr;
-            _capacity = new_capacity;
-            _size += fill_len;
-
-            // Done.
-            return ret;
+            return _end_migrate_insert(
+                new_ptr, new_capacity, position, fill_len);
         }
 
         // Migrate to a new buffer with inserts in the middle.
@@ -922,35 +922,41 @@ namespace gdt
             InputIterator fill_itr)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(new_capacity > _size);
+            auto dst = _start_migrate_insert(
+                new_ptr, new_capacity, position, fill_len);
 
-            auto old_begin = begin();
-            auto new_begin = iterator(new_ptr);
-            auto pos_idx = position - old_begin;
-
-            // Migrate up to position.
-            _migrate(new_begin, old_begin, size_type(pos_idx));
-
-            // Insert at position.
-            auto dst = new_begin + pos_idx;
-            auto ret = dst;
-            for (; fill_len > 0; --fill_len, ++dst)
+            for (auto rem = fill_len; rem > 0; --rem, ++dst)
             {
                 _construct(std::addressof(*dst), *fill_itr++);
             }
 
-            // Migrate after position.
-            auto migrate_len = size_type(_size - size_type(pos_idx));
-            _migrate(dst, old_begin + pos_idx, migrate_len);
+            return _end_migrate_insert(
+                new_ptr, new_capacity, position, fill_len);
+        }
 
-            // Free the old buffer and use the new buffer.
-            _deallocate();
-            _ptr = new_ptr;
-            _capacity = new_capacity;
-            _size += fill_len;
+        // Move all elements >= `position` back `fill_len` indices.
+        constexpr iterator _make_gap(const_iterator position, size_type len)
+        noexcept // `noexcept` is important here!
+        {
+            gdt_assume(size_type(_size + len) >= len);
+            gdt_assume(size_type(_size + len) <= _capacity);
+
+            // Construct past the end of the old array.
+            auto src = end();
+            for (auto rem = len; rem > 0 && src > position; --rem)
+            {
+                --src;
+                auto dst = src + len;
+                _construct(std::addressof(*dst), std::move(*src));
+            }
+
+            // Assign inside the old array.
+            auto beg = begin();
+            auto pos = position - beg + beg;
+            std::move_backward(pos, src, src + len);
 
             // Done.
-            return ret;
+            return pos;
         }
 
         // Destroy and construct.
@@ -968,33 +974,24 @@ namespace gdt
             const_iterator position,
             Args&&... args)
         {
-            gdt_assume(_capacity > _size);
-
             auto old_end = end();
             if (position == old_end)
             {
                 // Emplace at the end.
-                _construct(
-                    std::addressof(*old_end), std::forward<Args>(args)...);
+                gdt_assume(_capacity > _size);
+                auto dst = std::addressof(*old_end);
+                _construct(dst, std::forward<Args>(args)...);
                 ++_size;
                 return old_end;
             }
             else
             {
-                // Move all elements >= `position` back one index.
-                auto old_end_m1 = old_end - 1;
-                _construct(std::addressof(*old_end), std::move(*old_end_m1));
+                // Move all elements >= `position` back one
+                // index and replace the element at `position`.
+                auto pos = _make_gap(position, 1);
+                _replace(std::addressof(*pos), std::forward<Args>(args)...);
                 ++_size;
-
-                auto beg = begin();
-                auto dst = position - beg + beg;
-                std::move_backward(dst, old_end_m1, old_end);
-
-                // Replace the element at `position`.
-                _replace(std::addressof(*dst), std::forward<Args>(args)...);
-
-                // Done.
-                return dst;
+                return pos;
             }
         }
 
@@ -1006,29 +1003,22 @@ namespace gdt
         noexcept // `noexcept` is important here!
         {
             gdt_assume(size_type(_size + fill_len) >= fill_len);
-            auto old_end = end();
+            gdt_assume(size_type(_size + fill_len) <= _capacity);
 
             // Move all elements >= `position` back `fill_len` indices.
-            auto src = old_end;
-            for (auto rem = fill_len; rem > 0 && src > position; --rem)
-            {
-                --src;
-                auto dst = src + fill_len;
-                _construct(std::addressof(*dst), std::move(*src));
-            }
+            auto pos = _make_gap(position, fill_len);
 
-            auto beg = begin();
-            auto pos = position - beg + beg;
-            std::move_backward(pos, src, src + fill_len);
-
-            // Copy-construct elements past the end of the old array.
+            // Get ready to fill the gap.
+            auto old_end = end();
             auto dst = pos + fill_len;
+
+            // Construct past the end of the old array.
             while (dst > old_end && dst > pos)
             {
                 _construct(std::addressof(*--dst), fill_value);
             }
 
-            // Copy-assign elements inside the old array.
+            // Assign inside the old array.
             while (dst > pos)
             {
                 *--dst = fill_value;
@@ -1049,36 +1039,28 @@ namespace gdt
         noexcept // `noexcept` is important here!
         {
             gdt_assume(size_type(_size + fill_len) >= fill_len);
-            auto old_end = end();
+            gdt_assume(size_type(_size + fill_len) <= _capacity);
 
             // Move all elements >= `position` back `fill_len` indices.
-            auto src = old_end;
-            for (auto rem = fill_len; rem > 0 && src > position; --rem)
-            {
-                --src;
-                auto dst = src + fill_len;
-                _construct(std::addressof(*dst), std::move(*src));
-            }
+            auto pos = _make_gap(position, fill_len);
 
-            auto beg = begin();
-            auto pos = position - beg + beg;
-            std::move_backward(pos, src, src + fill_len);
-
+            // Iterate backwards to match `_make_gap` if possible.
+            auto old_end = end();
             if constexpr (std::is_base_of_v<
                 std::bidirectional_iterator_tag,
                 typename std::iterator_traits<InputIterator>::
                     iterator_category>)
             {
+                auto dst = pos + fill_len;
                 auto& fill_itr = fill_end;
 
-                // Copy-construct elements past the end of the old array.
-                auto dst = pos + fill_len;
+                // Construct past the end of the old array.
                 while (dst > old_end && dst > pos)
                 {
                     _construct(std::addressof(*--dst), *--fill_itr);
                 }
 
-                // Copy-assign elements inside the old array.
+                // Assign inside the old array.
                 while (dst > pos)
                 {
                     *--dst = *--fill_itr;
@@ -1086,17 +1068,17 @@ namespace gdt
             }
             else
             {
-                auto& fill_itr = fill_begin;
-
-                // Copy-assign elements inside the old array.
                 auto dst = pos;
                 auto dst_end = pos + fill_len;
+                auto& fill_itr = fill_begin;
+
+                // Assign inside the old array.
                 while (dst < old_end && dst < dst_end)
                 {
                     *dst++ = *fill_itr++;
                 }
 
-                // Copy-construct elements past the end of the old array.
+                // Construct past the end of the old array.
                 while (dst < dst_end)
                 {
                     _construct(std::addressof(*dst++), *fill_itr++);
@@ -1187,10 +1169,10 @@ namespace gdt_detail
 
         // Subscript.
         constexpr T& operator[](
-            typename vector<T, Allocator>::difference_type n)
+            typename vector<T, Allocator>::difference_type i)
         const
         {
-            return _ptr[_ptr_diff(n)];
+            return _ptr[_ptr_diff(i)];
         }
 
         // Pre-increment.
@@ -1221,67 +1203,67 @@ namespace gdt_detail
 
         // Addition.
         friend constexpr vector_iterator operator+(
-            const vector_iterator& a,
-            typename vector<T, Allocator>::difference_type n)
+            const vector_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            return vector_iterator(a._ptr + _ptr_diff(n));
+            return vector_iterator(lhs._ptr + _ptr_diff(rhs));
         }
 
         // Addition.
         friend constexpr vector_iterator operator+(
-            typename vector<T, Allocator>::difference_type n,
-            const vector_iterator& a)
+            typename vector<T, Allocator>::difference_type lhs,
+            const vector_iterator& rhs)
         {
-            return vector_iterator(_ptr_diff(n) + a._ptr);
+            return vector_iterator(_ptr_diff(lhs) + rhs._ptr);
         }
 
         // Subtraction.
         friend constexpr vector_iterator operator-(
-            const vector_iterator& a,
-            typename vector<T, Allocator>::difference_type n)
+            const vector_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            return vector_iterator(a._ptr - _ptr_diff(n));
+            return vector_iterator(lhs._ptr - _ptr_diff(rhs));
         }
 
         // Subtraction.
         friend constexpr typename vector<T, Allocator>::difference_type
-        operator-(const vector_iterator& b, const vector_iterator& a)
+        operator-(const vector_iterator& lhs, const vector_iterator& rhs)
         {
-            return _vec_diff(b._ptr - a._ptr);
+            return _vec_diff(lhs._ptr - rhs._ptr);
         }
 
         // Addition assignment.
         friend constexpr vector_iterator& operator+=(
-            vector_iterator& r,
-            typename vector<T, Allocator>::difference_type n)
+            vector_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            r._ptr += _ptr_diff(n);
-            return r;
+            lhs._ptr += _ptr_diff(rhs);
+            return lhs;
         }
 
         // Subtraction assignment.
         friend constexpr vector_iterator& operator-=(
-            vector_iterator& r,
-            typename vector<T, Allocator>::difference_type n)
+            vector_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            r._ptr -= _ptr_diff(n);
-            return r;
+            lhs._ptr -= _ptr_diff(rhs);
+            return lhs;
         }
 
         // Equality.
         friend constexpr bool operator==(
-            const vector_iterator& a,
-            const vector_iterator& b)
+            const vector_iterator& lhs,
+            const vector_iterator& rhs)
         {
-            return a._ptr == b._ptr;
+            return lhs._ptr == rhs._ptr;
         }
 
         // Comparison.
         friend constexpr auto operator<=>(
-            const vector_iterator& a,
-            const vector_iterator& b)
+            const vector_iterator& lhs,
+            const vector_iterator& rhs)
         {
-            return a._ptr <=> b._ptr;
+            return lhs._ptr <=> rhs._ptr;
         }
 
     private:
@@ -1304,18 +1286,18 @@ namespace gdt_detail
         {}
 
         // Pointer diff from vector diff.
-        static constexpr _pointer_diff _ptr_diff(_vector_diff n)
+        static constexpr _pointer_diff _ptr_diff(_vector_diff d)
         {
-            auto ret = _pointer_diff(n);
-            gdt_assume(ret == n);
+            auto ret = _pointer_diff(d);
+            gdt_assume(ret == d);
             return ret;
         }
 
         // Vector diff from pointer diff.
-        static constexpr _vector_diff _vec_diff(_pointer_diff n)
+        static constexpr _vector_diff _vec_diff(_pointer_diff d)
         {
-            auto ret = _vector_diff(n);
-            gdt_assume(ret == n);
+            auto ret = _vector_diff(d);
+            gdt_assume(ret == d);
             return ret;
         }
     };
@@ -1330,10 +1312,10 @@ namespace gdt_detail
 
         // Constructor.
         constexpr vector_const_iterator(
-            const vector_iterator<T, Allocator>& a)
+            const vector_iterator<T, Allocator>& other)
         noexcept
         :
-            _ptr{a._ptr}
+            _ptr{other._ptr}
         {}
 
         // Dereference.
@@ -1351,10 +1333,10 @@ namespace gdt_detail
 
         // Subscript.
         constexpr const T& operator[](
-            typename vector<T, Allocator>::difference_type n)
+            typename vector<T, Allocator>::difference_type i)
         const
         {
-            return _ptr[_ptr_diff(n)];
+            return _ptr[_ptr_diff(i)];
         }
 
         // Pre-increment.
@@ -1385,69 +1367,69 @@ namespace gdt_detail
 
         // Addition.
         friend constexpr vector_const_iterator operator+(
-            const vector_const_iterator& a,
-            typename vector<T, Allocator>::difference_type n)
+            const vector_const_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            return vector_const_iterator(a._ptr + _ptr_diff(n));
+            return vector_const_iterator(lhs._ptr + _ptr_diff(rhs));
         }
 
         // Addition.
         friend constexpr vector_const_iterator operator+(
-            typename vector<T, Allocator>::difference_type n,
-            const vector_const_iterator& a)
+            typename vector<T, Allocator>::difference_type lhs,
+            const vector_const_iterator& rhs)
         {
-            return vector_const_iterator(_ptr_diff(n) + a._ptr);
+            return vector_const_iterator(_ptr_diff(lhs) + rhs._ptr);
         }
 
         // Subtraction.
         friend constexpr vector_const_iterator operator-(
-            const vector_const_iterator& a,
-            typename vector<T, Allocator>::difference_type n)
+            const vector_const_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            return vector_const_iterator(a._ptr - _ptr_diff(n));
+            return vector_const_iterator(lhs._ptr - _ptr_diff(rhs));
         }
 
         // Subtraction.
         friend constexpr typename vector<T, Allocator>::difference_type
         operator-(
-            const vector_const_iterator& b,
-            const vector_const_iterator& a)
+            const vector_const_iterator& lhs,
+            const vector_const_iterator& rhs)
         {
-            return _vec_diff(b._ptr - a._ptr);
+            return _vec_diff(lhs._ptr - rhs._ptr);
         }
 
         // Addition assignment.
         friend constexpr vector_const_iterator& operator+=(
-            vector_const_iterator& r,
-            typename vector<T, Allocator>::difference_type n)
+            vector_const_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            r._ptr += _ptr_diff(n);
-            return r;
+            lhs._ptr += _ptr_diff(rhs);
+            return lhs;
         }
 
         // Subtraction assignment.
         friend constexpr vector_const_iterator& operator-=(
-            vector_const_iterator& r,
-            typename vector<T, Allocator>::difference_type n)
+            vector_const_iterator& lhs,
+            typename vector<T, Allocator>::difference_type rhs)
         {
-            r._ptr -= _ptr_diff(n);
-            return r;
+            lhs._ptr -= _ptr_diff(rhs);
+            return lhs;
         }
 
         // Equality.
         friend constexpr bool operator==(
-            const vector_const_iterator& a,
-            const vector_const_iterator& b)
+            const vector_const_iterator& lhs,
+            const vector_const_iterator& rhs)
         {
-            return a._ptr == b._ptr;
+            return lhs._ptr == rhs._ptr;
         }
 
         // Comparison.
         friend constexpr auto operator<=>(
-            const vector_const_iterator& a,
-            const vector_const_iterator& b)
+            const vector_const_iterator& lhs,
+            const vector_const_iterator& rhs)
         {
-            return a._ptr <=> b._ptr;
+            return lhs._ptr <=> rhs._ptr;
         }
 
     private:
@@ -1469,18 +1451,18 @@ namespace gdt_detail
         {}
 
         // Pointer diff from vector diff.
-        static constexpr _pointer_diff _ptr_diff(_vector_diff n)
+        static constexpr _pointer_diff _ptr_diff(_vector_diff d)
         {
-            auto ret = _pointer_diff(n);
-            gdt_assume(ret == n);
+            auto ret = _pointer_diff(d);
+            gdt_assume(ret == d);
             return ret;
         }
 
         // Vector diff from pointer diff.
-        static constexpr _vector_diff _vec_diff(_pointer_diff n)
+        static constexpr _vector_diff _vec_diff(_pointer_diff d)
         {
-            auto ret = _vector_diff(n);
-            gdt_assume(ret == n);
+            auto ret = _vector_diff(d);
+            gdt_assume(ret == d);
             return ret;
         }
     };
