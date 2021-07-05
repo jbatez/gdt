@@ -741,6 +741,48 @@ namespace gdt
             _erase_after(0);
         }
 
+        // Equality.
+        friend constexpr bool operator==(const vector& lhs, const vector& rhs)
+        {
+            return std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+        }
+
+        // Comparison.
+        friend constexpr auto operator<=>(const vector& lhs, const vector& rhs)
+        {
+            auto litr = lhs.begin();
+            auto lend = lhs.end();
+            auto ritr = rhs.begin();
+            auto rend = rhs.end();
+
+            bool exhaust_lhs = (litr == lend);
+            bool exhaust_rhs = (ritr == rend);
+            for (;
+                !exhaust_lhs && !exhaust_rhs;
+                exhaust_lhs = (++litr == lend),
+                exhaust_rhs = (++ritr == rend))
+            {
+                auto ret = *litr <=> *ritr;
+                if (ret != 0)
+                {
+                    return ret;
+                }
+            }
+
+            if (!exhaust_lhs)
+            {
+                return std::strong_ordering::greater;
+            }
+            else if (!exhaust_rhs)
+            {
+                return std::strong_ordering::less;
+            }
+            else
+            {
+                return std::strong_ordering::equal;
+            }
+        }
+
     private:
         // Member variables.
         [[no_unique_address]] Allocator _allocator;
