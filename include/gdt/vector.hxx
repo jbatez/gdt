@@ -708,7 +708,25 @@ namespace gdt
             std::allocator_traits<Allocator>::
                 propagate_on_container_swap::value ||
             std::allocator_traits<Allocator>::
-                is_always_equal::value);
+                is_always_equal::value)
+        {
+            using std::swap;
+
+            if constexpr (
+                std::allocator_traits<allocator_type>::
+                    propagate_on_container_swap::value)
+            {
+                swap(_allocator, other._allocator);
+            }
+            else
+            {
+                gdt_assume(_allocator == other._allocator);
+            }
+
+            swap(_ptr, other._ptr);
+            swap(_capacity, other._capacity);
+            swap(_size, other._size);
+        }
 
         // Clear.
         constexpr void clear() noexcept
@@ -1149,8 +1167,11 @@ namespace gdt
 
     // Swap.
     template<typename T, typename Allocator>
-    constexpr void swap(vector<T, Allocator>& x, vector<T, Allocator>& y)
-    noexcept(noexcept(x.swap(y)));
+    constexpr void swap(vector<T, Allocator>& lhs, vector<T, Allocator>& rhs)
+    noexcept(noexcept(lhs.swap(rhs)))
+    {
+        lhs.swap(rhs);
+    }
 }
 
 namespace gdt_detail
