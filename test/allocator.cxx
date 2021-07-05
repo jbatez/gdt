@@ -6,7 +6,7 @@
 
 using gdt::allocator;
 
-static consteval int test_consteval()
+consteval int test_consteval()
 {
     using schar = signed char;
     using uchar = unsigned char;

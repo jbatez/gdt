@@ -750,6 +750,8 @@ namespace gdt
         // Comparison.
         friend constexpr auto operator<=>(const vector& lhs, const vector& rhs)
         {
+            // TODO: Use lexicographical_compare_three_way.
+
             auto litr = lhs.begin();
             auto lend = lhs.end();
             auto ritr = rhs.begin();
