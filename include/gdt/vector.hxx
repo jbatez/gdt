@@ -902,7 +902,8 @@ namespace gdt
         }
 
         // Push back range.
-        constexpr void _push_back(const_iterator first, const_iterator last)
+        template<typename InputIterator>
+        constexpr void _push_back(InputIterator first, InputIterator last)
         {
             for (; first < last; ++first)
             {
