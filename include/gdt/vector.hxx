@@ -555,6 +555,9 @@ namespace gdt
         template<typename... Args>
         constexpr iterator emplace(const_iterator position, Args&&... args)
         {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
             if (_capacity == _size)
             {
                 // Emplace in the middle of migration to a larger buffer.
@@ -589,6 +592,9 @@ namespace gdt
             size_type fill_len,
             const T& fill_value)
         {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
             auto req_capacity = size_type(_size + fill_len);
             gdt_assert(req_capacity >= fill_len); // Assert no overflow.
 
@@ -617,6 +623,9 @@ namespace gdt
             InputIterator first,
             InputIterator last)
         {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
             if constexpr (std::is_base_of_v<
                 std::forward_iterator_tag,
                 typename std::iterator_traits<InputIterator>::
@@ -668,11 +677,30 @@ namespace gdt
         // Erase.
         constexpr iterator erase(const_iterator position)
         {
+            gdt_assume(position >= begin());
+            gdt_assume(position < end());
+
             return erase(position, position + 1);
         }
 
         // Erase.
-        constexpr iterator erase(const_iterator first, const_iterator last);
+        constexpr iterator erase(const_iterator first, const_iterator last)
+        {
+            gdt_assume(first >= begin());
+            gdt_assume(first <= last);
+            gdt_assume(last <= end());
+
+            auto beg = begin();
+            auto first_idx = first - beg;
+            auto last_idx = last - beg;
+            auto len = size_type(last_idx - first_idx);
+
+            auto dst = beg + first_idx;
+            std::move(beg + last_idx, end(), dst);
+            _erase_after(size_type(_size - len));
+
+            return dst;
+        }
 
         // Swap.
         constexpr void swap(vector& other)
@@ -685,8 +713,7 @@ namespace gdt
         // Clear.
         constexpr void clear() noexcept
         {
-            _destroy(0, _size);
-            _size = 0;
+            _erase_after(0);
         }
 
     private:
@@ -698,6 +725,7 @@ namespace gdt
 
         // Take ownership of another vector's buffer.
         constexpr void _take_buffer(vector& other)
+        noexcept // `noexcept` is important here!
         {
             _ptr = std::exchange(other._ptr, nullptr);
             _capacity = std::exchange(other._capacity, 0);
@@ -741,6 +769,7 @@ namespace gdt
 
         // Deallocate the current buffer.
         constexpr void _deallocate()
+        noexcept // `noexcept` is important here!
         {
             std::allocator_traits<Allocator>::deallocate(
                 _allocator, _ptr, _capacity);
@@ -779,7 +808,6 @@ namespace gdt
             auto new_ptr = _allocate(new_capacity);
             _migrate(iterator(new_ptr), begin(), _size);
             _deallocate();
-
             _ptr = new_ptr;
             _capacity = new_capacity;
         }
@@ -807,8 +835,7 @@ namespace gdt
         }
 
         // Push back range.
-        template<typename InputIterator>
-        constexpr void _push_back(InputIterator first, InputIterator last)
+        constexpr void _push_back(const_iterator first, const_iterator last)
         {
             for (; first < last; ++first)
             {
@@ -817,8 +844,7 @@ namespace gdt
         }
 
         // Push back move range.
-        template<typename InputIterator>
-        constexpr void _push_back_move(InputIterator first, InputIterator last)
+        constexpr void _push_back_move(iterator first, iterator last)
         {
             for (; first < last; ++first)
             {
@@ -870,7 +896,7 @@ namespace gdt
             _deallocate();
             _ptr = new_ptr;
             _capacity = new_capacity;
-            _size += 1;
+            _size += fill_len;
 
             return pos;
         }
@@ -1002,9 +1028,6 @@ namespace gdt
             const T& fill_value)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(size_type(_size + fill_len) >= fill_len);
-            gdt_assume(size_type(_size + fill_len) <= _capacity);
-
             // Move all elements >= `position` back `fill_len` indices.
             auto pos = _make_gap(position, fill_len);
 
@@ -1038,9 +1061,6 @@ namespace gdt
             InputIterator fill_end)
         noexcept // `noexcept` is important here!
         {
-            gdt_assume(size_type(_size + fill_len) >= fill_len);
-            gdt_assume(size_type(_size + fill_len) <= _capacity);
-
             // Move all elements >= `position` back `fill_len` indices.
             auto pos = _make_gap(position, fill_len);
 
@@ -1090,36 +1110,27 @@ namespace gdt
             return pos;
         }
 
-        // Destroy from `i` to `j`.
-        constexpr void _destroy(size_type i, size_type j)
-        noexcept // `noexcept` is important here!
-        {
-            gdt_assume(i <= j);
-            gdt_assume(j <= _size);
-
-            for (; i < j; ++i)
-            {
-                _destroy(std::addressof((*this)[i]));
-            }
-        }
-
         // Destroy all and deallocate.
         constexpr void _destroy_all_and_deallocate()
-        noexcept // `noexcept` is important here!
         {
-            _destroy(0, _size);
+            _erase_after(0);
             _deallocate();
         }
 
         // Erase elements at the given index and beyond.
-        constexpr void _erase_after(size_type i) noexcept
+        constexpr void _erase_after(size_type i)
+        noexcept // `noexcept` is important here!
         {
-            _destroy(i, _size);
+            auto last = end();
+            for (auto itr = begin() + difference_type(i); itr < last; ++itr)
+            {
+                _destroy(std::addressof(*itr));
+            }
             _size = i;
         }
 
         // Reset to the default state.
-        constexpr void _reset() noexcept
+        constexpr void _reset()
         {
             _destroy_all_and_deallocate();
             _ptr = nullptr;
@@ -1162,7 +1173,7 @@ namespace gdt_detail
 
         // Member access.
         constexpr typename vector<T, Allocator>::pointer
-        operator->() const noexcept
+        operator->() const
         {
             return _ptr;
         }
@@ -1280,7 +1291,7 @@ namespace gdt_detail
         _pointer _ptr;
 
         // Constructor.
-        explicit constexpr vector_iterator(const _pointer& ptr) noexcept
+        explicit constexpr vector_iterator(const _pointer& ptr)
         :
             _ptr{ptr}
         {}
@@ -1313,7 +1324,6 @@ namespace gdt_detail
         // Constructor.
         constexpr vector_const_iterator(
             const vector_iterator<T, Allocator>& other)
-        noexcept
         :
             _ptr{other._ptr}
         {}
@@ -1326,7 +1336,7 @@ namespace gdt_detail
 
         // Member access.
         constexpr typename vector<T, Allocator>::const_pointer
-        operator->() const noexcept
+        operator->() const
         {
             return _ptr;
         }
@@ -1445,7 +1455,7 @@ namespace gdt_detail
         _pointer _ptr;
 
         // Constructor.
-        explicit constexpr vector_const_iterator(const _pointer& ptr) noexcept
+        explicit constexpr vector_const_iterator(const _pointer& ptr)
         :
             _ptr{ptr}
         {}
