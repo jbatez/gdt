@@ -790,6 +790,11 @@ namespace gdt
         size_type _capacity;
         size_type _size;
 
+        // Erase if.
+        template<typename VT, typename VAllocator, typename Pred>
+        friend constexpr typename std::vector<VT, VAllocator>::size_type
+        erase_if(std::vector<VT, VAllocator>& v, Pred pred);
+
         // Take ownership of another vector's buffer.
         constexpr void _take_buffer(vector& other)
         noexcept // `noexcept` is important here!
@@ -1214,6 +1219,24 @@ namespace gdt
             typename std::iterator_traits<InputIterator>::value_type>>
     vector(InputIterator, InputIterator, Allocator = Allocator()) ->
     vector<typename std::iterator_traits<InputIterator>::value_type, Allocator>;
+
+    // Erase.
+    template<typename VT, typename VAllocator, typename U>
+    constexpr typename std::vector<VT, VAllocator>::size_type
+    erase(std::vector<VT, VAllocator>& v, const U& value)
+    {
+        return erase_if(v, [&value](const VT& e){e == value;});
+    }
+
+    // Erase if.
+    template<typename VT, typename VAllocator, typename Pred>
+    constexpr typename std::vector<VT, VAllocator>::size_type
+    erase_if(std::vector<VT, VAllocator>& v, Pred pred)
+    {
+        // TODO
+        static_cast<void>(v);
+        static_cast<void>(pred);
+    }
 }
 
 namespace gdt_detail
