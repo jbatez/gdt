@@ -728,6 +728,13 @@ namespace gdt
             swap(_size, other._size);
         }
 
+        // Swap.
+        friend constexpr void swap(vector& lhs, vector& rhs)
+        noexcept(noexcept(lhs.swap(rhs)))
+        {
+            lhs.swap(rhs);
+        }
+
         // Clear.
         constexpr void clear() noexcept
         {
@@ -1164,14 +1171,6 @@ namespace gdt
             typename std::iterator_traits<InputIterator>::value_type>>
     vector(InputIterator, InputIterator, Allocator = Allocator()) ->
     vector<typename std::iterator_traits<InputIterator>::value_type, Allocator>;
-
-    // Swap.
-    template<typename T, typename Allocator>
-    constexpr void swap(vector<T, Allocator>& lhs, vector<T, Allocator>& rhs)
-    noexcept(noexcept(lhs.swap(rhs)))
-    {
-        lhs.swap(rhs);
-    }
 }
 
 namespace gdt_detail
