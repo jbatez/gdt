@@ -840,8 +840,11 @@ namespace gdt
         constexpr void _deallocate()
         noexcept // `noexcept` is important here!
         {
-            std::allocator_traits<Allocator>::deallocate(
-                _allocator, _ptr, _capacity);
+            if (_ptr != nullptr)
+            {
+                std::allocator_traits<Allocator>::deallocate(
+                    _allocator, _ptr, _capacity);
+            }
         }
 
         // Construct using allocator.

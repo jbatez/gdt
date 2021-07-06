@@ -72,7 +72,7 @@ namespace gdt
             }
 
             void* p;
-            if (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+            if constexpr (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
             {
                 auto align = std::align_val_t(alignof(T));
                 p = ::operator new(size, align, std::nothrow_t());
@@ -93,7 +93,7 @@ namespace gdt
             {
                 std::allocator<T>().deallocate(p, std::size_t(n));
             }
-            else if (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+            else if constexpr (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
             {
                 auto align = std::align_val_t(alignof(T));
                 ::operator delete(static_cast<void*>(p), align);

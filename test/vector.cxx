@@ -317,7 +317,7 @@ consteval int test_consteval()
     return 0;
 }
 
-int test_vector(int, char**)
+int test_vector(int, char** const)
 {
     return test_consteval();
 }

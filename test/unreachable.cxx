@@ -1,8 +1,8 @@
 #include <gdt/unreachable.hxx>
 
-int test_unreachable(int, char**)
+int test_unreachable(int, char** const)
 {
-    if (2 + 2 == 3)
+    if constexpr (2 + 2 == 3)
     {
         gdt_unreachable();
     }

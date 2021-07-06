@@ -12,9 +12,9 @@
     std::exit(EXIT_FAILURE);
 }
 
-int test_panic(int, char**)
+int test_panic(int, char** const)
 {
-    if (2 + 2 == 3)
+    if constexpr (2 + 2 == 3)
     {
         gdt_panic();
     }

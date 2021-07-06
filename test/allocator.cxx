@@ -23,13 +23,13 @@ consteval int test_consteval()
     return 0;
 }
 
-int test_allocator(int, char**)
+int test_allocator(int, char** const)
 {
     gdt_assert(test_consteval() == 0);
 
     [[maybe_unused]] std::vector<int, allocator<int>> v1(123);
 
-    struct alignas(128) foo_t {};
+    struct alignas(128) foo_t { char _[128]; };
     [[maybe_unused]] std::vector<foo_t, allocator<foo_t>> v2(123);
 
     return 0;
