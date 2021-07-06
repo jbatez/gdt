@@ -577,13 +577,13 @@ namespace gdt
         // Insert.
         constexpr iterator insert(const_iterator position, const T& value)
         {
-            return emplace(position, value);
+            return _insert(position, value);
         }
 
         // Insert.
         constexpr iterator insert(const_iterator position, T&& value)
         {
-            return emplace(position, std::move(value));
+            return _insert(position, std::move(value));
         }
 
         // Insert.
@@ -931,6 +931,28 @@ namespace gdt
             }
         }
 
+        // Insert a single element by copy or move.
+        template<typename U>
+        constexpr iterator _insert(const_iterator position, U&& value)
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            if (_capacity == _size)
+            {
+                // Insert in the middle of migration to a larger buffer.
+                auto new_capacity = _choose_next_capacity();
+                auto new_ptr = _allocate(new_capacity);
+                return _migrate_emplace(
+                    new_ptr, new_capacity, position, std::forward<U>(value));
+            }
+            else
+            {
+                // Replace an existing element after making a gap.
+                return _replace_insert(position, std::forward<U>(value));
+            }
+        }
+
         // The start of a migrate insertion.
         constexpr iterator _start_migrate_insert(
             pointer new_ptr,
@@ -1086,6 +1108,31 @@ namespace gdt
                 // index and replace the element at `position`.
                 auto pos = _make_gap(position, 1);
                 _replace(std::addressof(*pos), std::forward<Args>(args)...);
+                ++_size;
+                return pos;
+            }
+        }
+
+        // Insert in the existing buffer.
+        template<typename U>
+        constexpr iterator _replace_insert(const_iterator position, U&& value)
+        {
+            auto old_end = end();
+            if (position == old_end)
+            {
+                // Insert at the end.
+                gdt_assume(_capacity > _size);
+                auto dst = std::addressof(*old_end);
+                _construct(dst, std::forward<U>(value));
+                ++_size;
+                return old_end;
+            }
+            else
+            {
+                // Move all elements >= `position` back one
+                // index and replace the element at `position`.
+                auto pos = _make_gap(position, 1);
+                *pos = std::forward<U>(value);
                 ++_size;
                 return pos;
             }
