@@ -165,6 +165,7 @@ namespace gdt
                 {
                     if (_allocator != other._allocator)
                     {
+                        // Free old memory since we have a different allocator.
                         _reset();
                     }
                 }
@@ -184,7 +185,7 @@ namespace gdt
         {
             if (&other == this)
             {
-                return *this;
+                // No-op.
             }
             else if constexpr (
                 std::allocator_traits<Allocator>::
@@ -193,45 +194,38 @@ namespace gdt
                 _destroy_all_and_deallocate();
                 _allocator = std::move(other._allocator);
                 _take_buffer(other);
-                return *this;
             }
             else if constexpr (
                 std::allocator_traits<Allocator>::is_always_equal::value)
             {
                 _destroy_all_and_deallocate();
                 _take_buffer(other);
-                return *this;
             }
             else if (_allocator == other._allocator)
             {
                 _destroy_all_and_deallocate();
                 _take_buffer(other);
-                return *this;
             }
             else
             {
                 // Element-wise move since we have a different allocator.
                 _reserve_for_assign(other._size);
 
-                // Assign over existing elements where possible.
                 auto src_begin = other.begin();
-                auto src_len = std::min(_size, other._size);
-                auto src_end = src_begin + difference_type(src_len);
-                std::move(src_begin, src_end, begin());
-
-                // Push the rest or erase the old leftovers.
                 if (_size < other._size)
                 {
+                    auto src_end = src_begin + difference_type(_size);
+                    std::move(src_begin, src_end, begin());
                     _push_back_move(src_end, other.end());
                 }
                 else
                 {
-                    _erase_after(src_len);
+                    auto move_end = std::move(src_begin, other.end(), begin());
+                    _truncate(move_end);
                 }
-
-                // Done.
-                return *this;
             }
+
+            return *this;
         }
 
         // Assignment.
@@ -262,25 +256,33 @@ namespace gdt
             }
 
             // Assign over existing elements where possible.
-            size_type i = 0;
-            auto& itr = first;
-            bool exhausted = (itr == last);
-            for (; i < _size && !exhausted; ++i, exhausted = (++itr == last))
+            auto& src = first;
+            auto& src_end = last;
+            bool src_exhausted = (src == src_end);
+
+            auto dst = begin();
+            auto dst_end = end();
+            bool dst_exhausted = (dst == dst_end);
+
+            for (;
+                !src_exhausted && !dst_exhausted;
+                src_exhausted = (++src == src_end),
+                dst_exhausted = (++dst == dst_end))
             {
-                (*this)[i] = *itr;
+                *dst = *src;
             }
 
-            // Push the rest or erase the old leftovers.
-            if (!exhausted)
+            // Push the rest or truncate.
+            if (dst_exhausted)
             {
-                for (; !exhausted; exhausted = (++itr == last))
+                for (; !src_exhausted; src_exhausted = (++src == src_end))
                 {
-                    push_back(*itr);
+                    push_back(*src);
                 }
             }
             else
             {
-                _erase_after(i);
+                _truncate(dst);
             }
         }
 
@@ -291,7 +293,7 @@ namespace gdt
 
             // Assign over existing elements where possible.
             auto fill_len = difference_type(std::min(_size, tgt_len));
-            std::fill_n(begin(), fill_len, fill_value);
+            auto fill_end = std::fill_n(begin(), fill_len, fill_value);
 
             // Push the rest or erase the old leftovers.
             if (_size < tgt_len)
@@ -300,7 +302,7 @@ namespace gdt
             }
             else
             {
-                _erase_after(tgt_len);
+                _truncate(fill_end);
             }
         }
 
@@ -353,13 +355,13 @@ namespace gdt
         }
 
         // Reverse end.
-        constexpr reverse_iterator rend() noexcept
+        constexpr reverse_iterator rhs_end() noexcept
         {
             return reverse_iterator(begin());
         }
 
         // Reverse end.
-        constexpr const_reverse_iterator rend() const noexcept
+        constexpr const_reverse_iterator rhs_end() const noexcept
         {
             return const_reverse_iterator(begin());
         }
@@ -385,7 +387,7 @@ namespace gdt
         // Const reverse end.
         constexpr const_reverse_iterator crend() const noexcept
         {
-            return rend();
+            return rhs_end();
         }
 
         // Empty?
@@ -602,11 +604,12 @@ namespace gdt
             auto last_idx = last - beg;
             auto len = size_type(last_idx - first_idx);
 
-            auto dst = beg + first_idx;
-            std::move(beg + last_idx, end(), dst);
-            _erase_after(size_type(_size - len));
+            auto src_begin = beg + last_idx;
+            auto dst_begin = beg + first_idx;
+            auto dst_end = std::move(src_begin, end(), dst_begin);
+            _truncate(dst_end);
 
-            return dst;
+            return dst_begin;
         }
 
         // Swap.
@@ -645,7 +648,7 @@ namespace gdt
         // Clear.
         constexpr void clear() noexcept
         {
-            _erase_after(0);
+            _truncate(begin());
         }
 
         // Equality.
@@ -660,30 +663,31 @@ namespace gdt
         {
             // TODO: Use lexicographical_compare_three_way.
 
-            auto litr = lhs.begin();
-            auto lend = lhs.end();
-            auto ritr = rhs.begin();
-            auto rend = rhs.end();
+            auto lhs_itr = lhs.begin();
+            auto lhs_end = lhs.end();
+            bool lhs_exhausted = (lhs_itr == lhs_end);
 
-            bool exhaust_lhs = (litr == lend);
-            bool exhaust_rhs = (ritr == rend);
+            auto rhs_itr = rhs.begin();
+            auto rhs_end = rhs.end();
+            bool rhs_exhausted = (rhs_itr == rhs_end);
+
             for (;
-                !exhaust_lhs && !exhaust_rhs;
-                exhaust_lhs = (++litr == lend),
-                exhaust_rhs = (++ritr == rend))
+                !lhs_exhausted && !rhs_exhausted;
+                lhs_exhausted = (++lhs_itr == lhs_end),
+                rhs_exhausted = (++rhs_itr == rhs_end))
             {
-                auto ret = *litr <=> *ritr;
+                auto ret = (*lhs_itr <=> *rhs_itr);
                 if (ret != 0)
                 {
                     return ret;
                 }
             }
 
-            if (!exhaust_lhs)
+            if (!lhs_exhausted)
             {
                 return std::strong_ordering::greater;
             }
-            else if (!exhaust_rhs)
+            else if (!rhs_exhausted)
             {
                 return std::strong_ordering::less;
             }
@@ -708,6 +712,14 @@ namespace gdt
             _size = std::exchange(other._size, 0);
         }
 
+        // Choose the next capacity.
+        constexpr size_type _choose_next_capacity()
+        {
+            auto req_capacity = size_type(_capacity + 1);
+            gdt_assert(req_capacity != 0); // Assert no overflow.
+            return _choose_new_capacity(req_capacity);
+        }
+
         // Choose a new capacity >= `req_capacity`.
         constexpr size_type _choose_new_capacity(size_type req_capacity)
         {
@@ -719,14 +731,6 @@ namespace gdt
             }
 
             return std::max(req_capacity, capacity_x2);
-        }
-
-        // Choose the next capacity.
-        constexpr size_type _choose_next_capacity()
-        {
-            auto req_capacity = size_type(_capacity + 1);
-            gdt_assert(req_capacity != 0); // Assert no overflow.
-            return _choose_new_capacity(req_capacity);
         }
 
         // Allocate a buffer with capacity `n`.
@@ -806,11 +810,14 @@ namespace gdt
             _deallocate();
         }
 
-        // Erase elements at the given index and beyond.
-        constexpr void _erase_after(size_type i) noexcept
+        // Erase elements at the given iterator and beyond.
+        constexpr void _truncate(iterator new_end) noexcept
         {
-            _destroy(begin() + difference_type(i), end());
-            _size = i;
+            gdt_assume(new_end >= begin());
+            gdt_assume(new_end <= end());
+
+            _size = size_type(new_end - begin());
+            _destroy(new_end, end());
         }
 
         // Reset to the default state.
