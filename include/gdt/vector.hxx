@@ -7,7 +7,6 @@
 #include <compare>
 #include <initializer_list>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -212,7 +211,7 @@ namespace gdt
             else
             {
                 // Element-wise move since we have a different allocator.
-                _reserve_without_migrate(other._size);
+                _reserve_for_assign(other._size);
 
                 // Assign over existing elements where possible.
                 auto src_begin = other.begin();
@@ -259,21 +258,25 @@ namespace gdt
                 auto d = std::distance(first, last);
                 auto u = std::make_unsigned_t<decltype(d)>(d);
                 gdt_assert(u <= max_size());
-                _reserve_without_migrate(u);
+                _reserve_for_assign(size_type(u));
             }
 
             // Assign over existing elements where possible.
             size_type i = 0;
             auto& itr = first;
-            for (; i < _size && itr != last; ++i, ++itr)
+            bool exhausted = (itr == last);
+            for (; i < _size && !exhausted; ++i, exhausted = (++itr == last))
             {
                 (*this)[i] = *itr;
             }
 
             // Push the rest or erase the old leftovers.
-            if (itr != last)
+            if (!exhausted)
             {
-                _push_back(itr, last);
+                for (; !exhausted; exhausted = (++itr == last))
+                {
+                    push_back(*itr);
+                }
             }
             else
             {
@@ -284,7 +287,7 @@ namespace gdt
         // Assign.
         constexpr void assign(size_type tgt_len, const T& fill_value)
         {
-            _reserve_without_migrate(tgt_len);
+            _reserve_for_assign(tgt_len);
 
             // Assign over existing elements where possible.
             auto fill_len = difference_type(std::min(_size, tgt_len));
@@ -447,18 +450,14 @@ namespace gdt
         // Subscript.
         constexpr reference operator[](size_type i)
         {
-            auto d = (std::numeric_limits<difference_type>::max)();
-            auto u = std::make_unsigned_t<decltype(d)>(d);
-            gdt_assume(i <= u);
+            gdt_assume(i < max_size());
             return begin()[difference_type(i)];
         }
 
         // Subscript.
         constexpr const_reference operator[](size_type i) const
         {
-            auto d = (std::numeric_limits<difference_type>::max)();
-            auto u = std::make_unsigned_t<decltype(d)>(d);
-            gdt_assume(i <= u);
+            gdt_assume(i < max_size());
             return begin()[difference_type(i)];
         }
 
@@ -553,65 +552,19 @@ namespace gdt
 
         // Emplace.
         template<typename... Args>
-        constexpr iterator emplace(const_iterator position, Args&&... args)
-        {
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
-
-            if (_capacity == _size)
-            {
-                // Emplace in the middle of migration to a larger buffer.
-                auto new_capacity = _choose_next_capacity();
-                auto new_ptr = _allocate(new_capacity);
-                return _migrate_emplace(
-                    new_ptr, new_capacity, position,
-                    std::forward<Args>(args)...);
-            }
-            else
-            {
-                // Replace an existing element after making a gap.
-                return _replace_emplace(position, std::forward<Args>(args)...);
-            }
-        }
+        constexpr iterator emplace(const_iterator position, Args&&... args);
 
         // Insert.
-        constexpr iterator insert(const_iterator position, const T& value)
-        {
-            return _insert(position, value);
-        }
+        constexpr iterator insert(const_iterator position, const T& value);
 
         // Insert.
-        constexpr iterator insert(const_iterator position, T&& value)
-        {
-            return _insert(position, std::move(value));
-        }
+        constexpr iterator insert(const_iterator position, T&& value);
 
         // Insert.
         constexpr iterator insert(
             const_iterator position,
             size_type fill_len,
-            const T& fill_value)
-        {
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
-
-            auto req_capacity = size_type(_size + fill_len);
-            gdt_assert(req_capacity >= fill_len); // Assert no overflow.
-
-            if (_capacity < req_capacity)
-            {
-                // Insert in the middle of migration to a larger buffer.
-                auto new_capacity = _choose_new_capacity(req_capacity);
-                auto new_ptr = _allocate(new_capacity);
-                return _migrate_insert(
-                    new_ptr, new_capacity, position, fill_len, fill_value);
-            }
-            else
-            {
-                // Replace existing elements after making a gap.
-                return _replace_insert(position, fill_len, fill_value);
-            }
-        }
+            const T& fill_value);
 
         // Insert.
         template<typename InputIterator>
@@ -621,58 +574,12 @@ namespace gdt
         constexpr iterator insert(
             const_iterator position,
             InputIterator first,
-            InputIterator last)
-        {
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
-
-            if constexpr (std::is_base_of_v<
-                std::forward_iterator_tag,
-                typename std::iterator_traits<InputIterator>::
-                    iterator_category>)
-            {
-                auto d = std::distance(first, last);
-                auto u = std::make_unsigned_t<decltype(d)>(d);
-                gdt_assert(u <= max_size());
-                auto fill_len = size_type(u);
-
-                auto req_capacity = size_type(_size + fill_len);
-                gdt_assert(req_capacity >= fill_len); // Assert no overflow.
-
-                if (_capacity < req_capacity)
-                {
-                    // Insert in the middle of migration to a larger buffer.
-                    auto new_capacity = _choose_new_capacity(req_capacity);
-                    auto new_ptr = _allocate(new_capacity);
-                    return _migrate_insert(
-                        new_ptr, new_capacity, position, fill_len, first);
-                }
-                else
-                {
-                    // Replace existing elements after making a gap.
-                    return _replace_insert(position, fill_len, first, last);
-                }
-            }
-            else
-            {
-                // No way to predict how many elements; insert one at a time.
-                auto pos_idx = position - begin();
-                auto dst_idx = pos_idx;
-                for (; first != last; ++first, ++dst_idx)
-                {
-                    insert(begin() + dst_idx, *first);
-                }
-                return begin() + pos_idx;
-            }
-        }
+            InputIterator last);
 
         // Insert.
         constexpr iterator insert(
             const_iterator position,
-            std::initializer_list<T> il)
-        {
-            return insert(position, il.begin(), il.end());
-        }
+            std::initializer_list<T> il);
 
         // Erase.
         constexpr iterator erase(const_iterator position)
@@ -844,22 +751,6 @@ namespace gdt
                 _allocator, p, std::forward<Args>(args)...);
         }
 
-        // Move-construct using allocator.
-        // Separate from _construct because callers assume noexcept.
-        constexpr void _move_construct(T* p, T&& other) noexcept
-        {
-            _construct(p, std::move(other));
-        }
-
-        // Destroy and construct.
-        // Marked as noexcept because we want to terminate if _construct fails.
-        template<typename... Args>
-        constexpr void _replace(T* p, Args&&... args) noexcept
-        {
-            _destroy(p);
-            _construct(p, std::forward<Args>(args)...);
-        }
-
         // Destroy using allocator.
         constexpr void _destroy(T* p) noexcept
         {
@@ -881,7 +772,7 @@ namespace gdt
         {
             for (; n > 0; ++dst, ++src, --n)
             {
-                _move_construct(std::addressof(*dst), std::move(*src));
+                _construct(std::addressof(*dst), std::move(*src));
                 _destroy(std::addressof(*src));
             }
         }
@@ -932,19 +823,8 @@ namespace gdt
         }
 
         // Reserve at least `tgt_len` capacity.
-        // Shrink to `tgt_len` if necessary.
-        constexpr void _reserve_or_shrink(size_type tgt_len)
-        {
-            reserve(tgt_len);
-            while (_size > tgt_len)
-            {
-                pop_back();
-            }
-        }
-
-        // Reserve at least `tgt_len` capacity.
         // Don't bother to migrate on reallocation.
-        constexpr void _reserve_without_migrate(size_type tgt_len)
+        constexpr void _reserve_for_assign(size_type tgt_len)
         {
             if (_capacity < tgt_len)
             {
@@ -953,13 +833,14 @@ namespace gdt
             }
         }
 
-        // Push back range.
-        template<typename InputIterator>
-        constexpr void _push_back(InputIterator first, InputIterator last)
+        // Reserve at least `tgt_len` capacity.
+        // Shrink to `tgt_len` if necessary.
+        constexpr void _reserve_or_shrink(size_type tgt_len)
         {
-            for (; first < last; ++first)
+            reserve(tgt_len);
+            while (_size > tgt_len)
             {
-                push_back(*first);
+                pop_back();
             }
         }
 
@@ -979,293 +860,6 @@ namespace gdt
             {
                 push_back(fill_value);
             }
-        }
-
-        // Insert a single element by copy or move.
-        template<typename U>
-        constexpr iterator _insert(const_iterator position, U&& value)
-        {
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
-
-            if (_capacity == _size)
-            {
-                // Insert in the middle of migration to a larger buffer.
-                auto new_capacity = _choose_next_capacity();
-                auto new_ptr = _allocate(new_capacity);
-                return _migrate_emplace(
-                    new_ptr, new_capacity, position, std::forward<U>(value));
-            }
-            else
-            {
-                // Replace an existing element after making a gap.
-                return _replace_insert(position, std::forward<U>(value));
-            }
-        }
-
-        // The start of a migrate insertion.
-        constexpr iterator _start_migrate_insert(
-            pointer new_ptr,
-            size_type new_capacity,
-            const_iterator position,
-            size_type fill_len)
-        {
-            gdt_assume(size_type(_size + fill_len) >= fill_len);
-            gdt_assume(size_type(_size + fill_len) <= new_capacity);
-
-            auto old_begin = begin();
-            auto new_begin = iterator(new_ptr);
-            auto pos_idx = position - old_begin;
-            _migrate(new_begin, old_begin, size_type(pos_idx));
-            return new_begin + pos_idx;
-        }
-
-        // The end of a migrate insertion.
-        constexpr iterator _end_migrate_insert(
-            pointer new_ptr,
-            size_type new_capacity,
-            const_iterator position,
-            size_type fill_len)
-        {
-            auto old_begin = begin();
-            auto pos_idx = position - old_begin;
-            auto pos = iterator(new_ptr) + pos_idx;
-            auto migrate_src = old_begin + pos_idx;
-            auto migrate_dst = pos + difference_type(fill_len);
-            auto migrate_len = size_type(_size - size_type(pos_idx));
-            _migrate(migrate_dst, migrate_src, migrate_len);
-
-            _deallocate();
-            _ptr = new_ptr;
-            _capacity = new_capacity;
-            _size += fill_len;
-
-            return pos;
-        }
-
-        // Migrate to a new buffer with an emplace in the middle.
-        template<typename... Args>
-        constexpr iterator _migrate_emplace(
-            pointer new_ptr,
-            size_type new_capacity,
-            const_iterator position,
-            Args&&... args)
-        noexcept // `noexcept` is important here!
-        {
-            auto dst = _start_migrate_insert(
-                new_ptr, new_capacity, position, 1);
-
-            _construct(std::addressof(*dst), std::forward<Args>(args)...);
-            return _end_migrate_insert(new_ptr, new_capacity, position, 1);
-        }
-
-        // Migrate to a new buffer with inserts in the middle.
-        constexpr iterator _migrate_insert(
-            pointer new_ptr,
-            size_type new_capacity,
-            const_iterator position,
-            size_type fill_len,
-            const T& fill_value)
-        noexcept // `noexcept` is important here!
-        {
-            auto dst = _start_migrate_insert(
-                new_ptr, new_capacity, position, fill_len);
-
-            for (auto rem = fill_len; rem > 0; --rem, ++dst)
-            {
-                _construct(std::addressof(*dst), fill_value);
-            }
-
-            return _end_migrate_insert(
-                new_ptr, new_capacity, position, fill_len);
-        }
-
-        // Migrate to a new buffer with inserts in the middle.
-        template<typename InputIterator>
-        constexpr iterator _migrate_insert(
-            pointer new_ptr,
-            size_type new_capacity,
-            const_iterator position,
-            size_type fill_len,
-            InputIterator fill_itr)
-        noexcept // `noexcept` is important here!
-        {
-            auto dst = _start_migrate_insert(
-                new_ptr, new_capacity, position, fill_len);
-
-            for (auto rem = fill_len; rem > 0; --rem, ++dst)
-            {
-                _construct(std::addressof(*dst), *fill_itr++);
-            }
-
-            return _end_migrate_insert(
-                new_ptr, new_capacity, position, fill_len);
-        }
-
-        // Move all elements >= `position` back `fill_len` indices.
-        constexpr iterator _make_gap(const_iterator position, size_type len)
-        noexcept // `noexcept` is important here!
-        {
-            gdt_assume(size_type(_size + len) >= len);
-            gdt_assume(size_type(_size + len) <= _capacity);
-
-            // Construct past the end of the old array.
-            auto src = end();
-            for (auto rem = len; rem > 0 && src > position; --rem)
-            {
-                --src;
-                auto dst = src + len;
-                _move_construct(std::addressof(*dst), std::move(*src));
-            }
-
-            // Assign inside the old array.
-            auto beg = begin();
-            auto pos = position - beg + beg;
-            std::move_backward(pos, src, src + len);
-
-            // Done.
-            return pos;
-        }
-
-        // Emplace in the existing buffer.
-        template<typename... Args>
-        constexpr iterator _replace_emplace(
-            const_iterator position,
-            Args&&... args)
-        {
-            auto old_end = end();
-            if (position == old_end)
-            {
-                // Emplace at the end.
-                gdt_assume(_capacity > _size);
-                auto dst = std::addressof(*old_end);
-                _construct(dst, std::forward<Args>(args)...);
-                ++_size;
-                return old_end;
-            }
-            else
-            {
-                // Move all elements >= `position` back one
-                // index and replace the element at `position`.
-                auto pos = _make_gap(position, 1);
-                _replace(std::addressof(*pos), std::forward<Args>(args)...);
-                ++_size;
-                return pos;
-            }
-        }
-
-        // Insert in the existing buffer.
-        template<typename U>
-        constexpr iterator _replace_insert(const_iterator position, U&& value)
-        {
-            auto old_end = end();
-            if (position == old_end)
-            {
-                // Insert at the end.
-                gdt_assume(_capacity > _size);
-                auto dst = std::addressof(*old_end);
-                _construct(dst, std::forward<U>(value));
-                ++_size;
-                return old_end;
-            }
-            else
-            {
-                // Move all elements >= `position` back one
-                // index and replace the element at `position`.
-                auto pos = _make_gap(position, 1);
-                *pos = std::forward<U>(value);
-                ++_size;
-                return pos;
-            }
-        }
-
-        // Insert in the existing buffer.
-        constexpr iterator _replace_insert(
-            const_iterator position,
-            size_type fill_len,
-            const T& fill_value)
-        noexcept // `noexcept` is important here!
-        {
-            // Move all elements >= `position` back `fill_len` indices.
-            auto pos = _make_gap(position, fill_len);
-
-            // Get ready to fill the gap.
-            auto old_end = end();
-            auto dst = pos + fill_len;
-
-            // Construct past the end of the old array.
-            while (dst > old_end && dst > pos)
-            {
-                _construct(std::addressof(*--dst), fill_value);
-            }
-
-            // Assign inside the old array.
-            while (dst > pos)
-            {
-                *--dst = fill_value;
-            }
-
-            // Done.
-            _size += fill_len;
-            return pos;
-        }
-
-        // Insert in the existing buffer.
-        template<typename InputIterator>
-        constexpr iterator _replace_insert(
-            const_iterator position,
-            size_type fill_len,
-            InputIterator fill_begin,
-            InputIterator fill_end)
-        noexcept // `noexcept` is important here!
-        {
-            // Move all elements >= `position` back `fill_len` indices.
-            auto pos = _make_gap(position, fill_len);
-
-            // Iterate backwards to match `_make_gap` if possible.
-            auto old_end = end();
-            if constexpr (std::is_base_of_v<
-                std::bidirectional_iterator_tag,
-                typename std::iterator_traits<InputIterator>::
-                    iterator_category>)
-            {
-                auto dst = pos + fill_len;
-                auto& fill_itr = fill_end;
-
-                // Construct past the end of the old array.
-                while (dst > old_end && dst > pos)
-                {
-                    _construct(std::addressof(*--dst), *--fill_itr);
-                }
-
-                // Assign inside the old array.
-                while (dst > pos)
-                {
-                    *--dst = *--fill_itr;
-                }
-            }
-            else
-            {
-                auto dst = pos;
-                auto dst_end = pos + fill_len;
-                auto& fill_itr = fill_begin;
-
-                // Assign inside the old array.
-                while (dst < old_end && dst < dst_end)
-                {
-                    *dst++ = *fill_itr++;
-                }
-
-                // Construct past the end of the old array.
-                while (dst < dst_end)
-                {
-                    _construct(std::addressof(*dst++), *fill_itr++);
-                }
-            }
-
-            // Done.
-            _size += fill_len;
-            return pos;
         }
     };
 
