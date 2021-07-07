@@ -749,6 +749,7 @@ namespace gdt
 
         // Comparison.
         friend constexpr auto operator<=>(const vector& lhs, const vector& rhs)
+        -> decltype(lhs[0] <=> rhs[0])
         {
             // TODO: Use lexicographical_compare_three_way.
 
@@ -793,8 +794,7 @@ namespace gdt
         size_type _size;
 
         // Take ownership of another vector's buffer.
-        constexpr void _take_buffer(vector& other)
-        noexcept // `noexcept` is important here!
+        constexpr void _take_buffer(vector& other) noexcept
         {
             _ptr = std::exchange(other._ptr, nullptr);
             _capacity = std::exchange(other._capacity, 0);
@@ -836,17 +836,6 @@ namespace gdt
             }
         }
 
-        // Deallocate the current buffer.
-        constexpr void _deallocate()
-        noexcept // `noexcept` is important here!
-        {
-            if (_ptr != nullptr)
-            {
-                std::allocator_traits<Allocator>::deallocate(
-                    _allocator, _ptr, _capacity);
-            }
-        }
-
         // Construct using allocator.
         template<typename... Args>
         constexpr void _construct(T* p, Args&&... args)
@@ -855,20 +844,55 @@ namespace gdt
                 _allocator, p, std::forward<Args>(args)...);
         }
 
+        // Move-construct using allocator.
+        // Separate from _construct because callers assume noexcept.
+        constexpr void _move_construct(T* p, T&& other) noexcept
+        {
+            _construct(p, std::move(other));
+        }
+
+        // Destroy and construct.
+        // Marked as noexcept because we want to terminate if _construct fails.
+        template<typename... Args>
+        constexpr void _replace(T* p, Args&&... args) noexcept
+        {
+            _destroy(p);
+            _construct(p, std::forward<Args>(args)...);
+        }
+
         // Destroy using allocator.
-        constexpr void _destroy(T* p)
+        constexpr void _destroy(T* p) noexcept
         {
             std::allocator_traits<Allocator>::destroy(_allocator, p);
         }
 
+        // Destroy range using allocator.
+        constexpr void _destroy(iterator first, iterator last) noexcept
+        {
+            for (; first < last; ++first)
+            {
+                _destroy(std::addressof(*first));
+            }
+        }
+
         // Move and destroy `n` elements from `src` to `dst`.
         constexpr void _migrate(iterator dst, iterator src, size_type n)
-        noexcept // `noexcept` is important here!
+        noexcept
         {
             for (; n > 0; ++dst, ++src, --n)
             {
-                _construct(std::addressof(*dst), std::move(*src));
+                _move_construct(std::addressof(*dst), std::move(*src));
                 _destroy(std::addressof(*src));
+            }
+        }
+
+        // Deallocate the current buffer.
+        constexpr void _deallocate() noexcept
+        {
+            if (_ptr != nullptr)
+            {
+                std::allocator_traits<Allocator>::deallocate(
+                    _allocator, _ptr, _capacity);
             }
         }
 
@@ -882,6 +906,29 @@ namespace gdt
             _deallocate();
             _ptr = new_ptr;
             _capacity = new_capacity;
+        }
+
+        // Destroy all and deallocate.
+        constexpr void _destroy_all_and_deallocate() noexcept
+        {
+            _destroy(begin(), end());
+            _deallocate();
+        }
+
+        // Erase elements at the given index and beyond.
+        constexpr void _erase_after(size_type i) noexcept
+        {
+            _destroy(begin() + difference_type(i), end());
+            _size = i;
+        }
+
+        // Reset to the default state.
+        constexpr void _reset() noexcept
+        {
+            _destroy_all_and_deallocate();
+            _ptr = nullptr;
+            _capacity = 0;
+            _size = 0;
         }
 
         // Reserve at least `tgt_len` capacity.
@@ -1068,7 +1115,7 @@ namespace gdt
             {
                 --src;
                 auto dst = src + len;
-                _construct(std::addressof(*dst), std::move(*src));
+                _move_construct(std::addressof(*dst), std::move(*src));
             }
 
             // Assign inside the old array.
@@ -1078,15 +1125,6 @@ namespace gdt
 
             // Done.
             return pos;
-        }
-
-        // Destroy and construct.
-        template<typename... Args>
-        constexpr void _replace(T* p, Args&&... args)
-        noexcept // `noexcept` is important here!
-        {
-            _destroy(p);
-            _construct(p, std::forward<Args>(args)...);
         }
 
         // Emplace in the existing buffer.
@@ -1228,34 +1266,6 @@ namespace gdt
             // Done.
             _size += fill_len;
             return pos;
-        }
-
-        // Destroy all and deallocate.
-        constexpr void _destroy_all_and_deallocate()
-        {
-            _erase_after(0);
-            _deallocate();
-        }
-
-        // Erase elements at the given index and beyond.
-        constexpr void _erase_after(size_type i)
-        noexcept // `noexcept` is important here!
-        {
-            auto last = end();
-            for (auto itr = begin() + difference_type(i); itr < last; ++itr)
-            {
-                _destroy(std::addressof(*itr));
-            }
-            _size = i;
-        }
-
-        // Reset to the default state.
-        constexpr void _reset()
-        {
-            _destroy_all_and_deallocate();
-            _ptr = nullptr;
-            _capacity = 0;
-            _size = 0;
         }
     };
 
@@ -1412,7 +1422,7 @@ namespace gdt_detail
         }
 
         // Comparison.
-        friend constexpr auto operator<=>(
+        friend constexpr std::strong_ordering operator<=>(
             const vector_iterator& lhs,
             const vector_iterator& rhs)
         {
@@ -1577,7 +1587,7 @@ namespace gdt_detail
         }
 
         // Comparison.
-        friend constexpr auto operator<=>(
+        friend constexpr std::strong_ordering operator<=>(
             const vector_const_iterator& lhs,
             const vector_const_iterator& rhs)
         {
