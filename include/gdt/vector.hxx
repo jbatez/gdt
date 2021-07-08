@@ -295,7 +295,7 @@ namespace gdt
             auto fill_len = difference_type(std::min(_size, tgt_len));
             auto fill_end = std::fill_n(begin(), fill_len, fill_value);
 
-            // Push the rest or erase the old leftovers.
+            // Push the rest or truncate.
             if (_size < tgt_len)
             {
                 _fill_to(tgt_len, fill_value);
@@ -596,7 +596,10 @@ namespace gdt
         // Insert.
         constexpr iterator insert(
             const_iterator position,
-            std::initializer_list<T> il);
+            std::initializer_list<T> il)
+        {
+            return insert(il.begin(), il.end());
+        }
 
         // Erase.
         constexpr iterator erase(const_iterator position)
@@ -618,12 +621,16 @@ namespace gdt
             auto first_idx = first - beg;
             auto last_idx = last - beg;
 
+            // Shift forward elements after the erase range.
             auto src_begin = beg + last_idx;
             auto src_end = end();
             auto dst_begin = beg + first_idx;
             auto dst_end = std::move(src_begin, src_end, dst_begin);
+
+            // Truncate after the shift.
             _truncate(dst_end);
 
+            // Done.
             return dst_begin;
         }
 
@@ -908,12 +915,12 @@ namespace gdt
             {
                 auto new_capacity = _choose_next_capacity();
                 auto new_ptr = _allocate(new_capacity);
-                return _migrate_emplace(
+                return _emplace_migrate(
                     new_ptr, new_capacity, position,
                     std::forward<Args>(args)...);
             }
 
-            // Emplace at the back if given the end iterator.
+            // Emplace back if given the end iterator.
             auto old_end = end();
             if (position == old_end)
             {
@@ -949,7 +956,7 @@ namespace gdt
 
         // Emplace in the middle of migration.
         template<typename... Args>
-        constexpr iterator _migrate_emplace(
+        constexpr iterator _emplace_migrate(
             pointer new_ptr,
             size_type new_capacity,
             const_iterator position,
