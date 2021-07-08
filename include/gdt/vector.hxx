@@ -615,7 +615,7 @@ namespace gdt
                 auto d = std::distance(first, last);
                 auto u = std::make_unsigned_t<decltype(d)>(d);
                 gdt_assert(u <= max_size() - _size);
-                auto new_size = size_type(_size + size_type(u));
+                auto new_size = size_type(_size + u);
 
                 // Insert in the middle of migration
                 // if reallocation is necessary.
@@ -631,8 +631,7 @@ namespace gdt
                 auto old_end = end();
                 if (position == old_end)
                 {
-                    auto dst = old_end;
-                    for (; first != last; ++first, ++dst)
+                    for (auto dst = old_end; first != last; ++first, ++dst)
                     {
                         _construct(std::addressof(*dst), *first);
                         ++_size;
@@ -648,15 +647,12 @@ namespace gdt
                 // We can't determine the new size ahead of time without forward
                 // iterators. The best we can do is insert one at a time.
                 auto beg = begin();
-                auto pos_idx = position - beg + beg;
-
-                auto dst_idx = pos_idx;
-                for (; first != last; ++first, ++dst_idx)
+                auto pos = position - beg + beg;
+                for (auto dst = pos; first != last; ++first, ++dst)
                 {
-                    insert(begin() + dst_idx, *first);
+                    insert(begin() + dst, *first);
                 }
-
-                return begin() + pos_idx;
+                return begin() + pos;
             }
         }
 

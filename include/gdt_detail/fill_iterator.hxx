@@ -6,7 +6,7 @@
 
 namespace gdt_detail
 {
-    // Vector iterator.
+    // Fill iterator.
     template<typename T, typename DiffT>
     class fill_iterator
     {
