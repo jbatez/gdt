@@ -602,58 +602,7 @@ namespace gdt
             InputIterator first,
             InputIterator last)
         {
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
-
-            if constexpr (std::is_base_of_v<
-                std::forward_iterator_tag,
-                typename std::iterator_traits<InputIterator>::
-                    iterator_category>)
-            {
-                // We can determine the new size ahead
-                // of time with forward iterators.
-                auto d = std::distance(first, last);
-                auto u = std::make_unsigned_t<decltype(d)>(d);
-                gdt_assert(u <= max_size() - _size);
-                auto new_size = size_type(_size + u);
-
-                // Insert in the middle of migration
-                // if reallocation is necessary.
-                if (_capacity < new_size)
-                {
-                    auto new_capacity = _choose_new_capacity(new_size);
-                    auto new_ptr = _allocate(new_capacity);
-                    return _insert_migrate(
-                        new_ptr, new_capacity, new_size, position, first, last);
-                }
-
-                // Emplace back if given the end iterator.
-                auto old_end = end();
-                if (position == old_end)
-                {
-                    for (auto dst = old_end; first != last; ++first, ++dst)
-                    {
-                        _construct(std::addressof(*dst), *first);
-                        ++_size;
-                    }
-                    return old_end;
-                }
-
-                // TODO
-                gdt_panic();
-            }
-            else
-            {
-                // We can't determine the new size ahead of time without forward
-                // iterators. The best we can do is insert one at a time.
-                auto beg = begin();
-                auto pos = position - beg + beg;
-                for (auto dst = pos; first != last; ++first, ++dst)
-                {
-                    insert(begin() + dst, *first);
-                }
-                return begin() + pos;
-            }
+            return _insert(position, first, last);
         }
 
         // Insert.
@@ -993,7 +942,7 @@ namespace gdt
                 return old_end;
             }
 
-            // Shift all elements back one index otherwise.
+            // Shift all elements from position onward back otherwise.
             auto old_end_m1 = old_end - 1;
             _construct(std::addressof(*old_end), std::move(*old_end_m1));
             ++_size;
@@ -1015,6 +964,71 @@ namespace gdt
 
             // Done.
             return pos;
+        }
+
+        // Insert multiple.
+        template<typename InputIterator>
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
+        constexpr iterator _insert(
+            const_iterator position,
+            InputIterator& first,
+            InputIterator& last)
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            if constexpr (std::is_base_of_v<
+                std::forward_iterator_tag,
+                typename std::iterator_traits<InputIterator>::
+                    iterator_category>)
+            {
+                // We can determine the new size ahead
+                // of time with forward iterators.
+                auto d = std::distance(first, last);
+                auto u = std::make_unsigned_t<decltype(d)>(d);
+                gdt_assert(u <= max_size() - _size);
+                auto new_size = size_type(_size + u);
+
+                // Insert in the middle of migration
+                // if reallocation is necessary.
+                if (_capacity < new_size)
+                {
+                    auto new_capacity = _choose_new_capacity(new_size);
+                    auto new_ptr = _allocate(new_capacity);
+                    return _insert_migrate(
+                        new_ptr, new_capacity, new_size, position, first, last);
+                }
+
+                // Emplace back if given the end iterator.
+                auto old_end = end();
+                if (position == old_end)
+                {
+                    for (auto dst = old_end; first != last; ++first, ++dst)
+                    {
+                        _construct(std::addressof(*dst), *first);
+                        ++_size;
+                    }
+                    return old_end;
+                }
+
+                // Shift all elements from position onward back otherwise.
+                // TODO
+                gdt_panic();
+            }
+            else
+            {
+                // We can't determine the new size ahead of time without forward
+                // iterators. The best we can do is insert one at a time.
+                auto beg = begin();
+                auto pos = position - beg + beg;
+                for (auto dst = pos; first != last; ++first, ++dst)
+                {
+                    insert(begin() + dst, *first);
+                }
+                return begin() + pos;
+            }
         }
 
         // Emplace in the middle of migration.
