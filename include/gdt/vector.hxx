@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../gdt_detail/fill_iterator.hxx"
 #include "allocator.hxx"
 #include "assert.hxx"
 #include "assume.hxx"
@@ -581,7 +582,15 @@ namespace gdt
         constexpr iterator insert(
             const_iterator position,
             size_type fill_len,
-            const T& fill_value);
+            const T& fill_value)
+        {
+            gdt_assert(fill_len <= max_size());
+            auto ptr = std::addressof(fill_value);
+            return insert(
+                position,
+                gdt_detail::fill_iterator(ptr, difference_type(0)),
+                gdt_detail::fill_iterator(ptr, difference_type(fill_len)));
+        }
 
         // Insert.
         template<typename InputIterator>
@@ -598,7 +607,7 @@ namespace gdt
             const_iterator position,
             std::initializer_list<T> il)
         {
-            return insert(il.begin(), il.end());
+            return insert(position, il.begin(), il.end());
         }
 
         // Erase.
