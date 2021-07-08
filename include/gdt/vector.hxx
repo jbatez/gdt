@@ -586,7 +586,7 @@ namespace gdt
         {
             gdt_assert(fill_len <= max_size());
             auto ptr = std::addressof(fill_value);
-            return insert(
+            return _insert(
                 position,
                 gdt_detail::fill_iterator(ptr, difference_type(0)),
                 gdt_detail::fill_iterator(ptr, difference_type(fill_len)));
@@ -610,7 +610,7 @@ namespace gdt
             const_iterator position,
             std::initializer_list<T> il)
         {
-            return insert(position, il.begin(), il.end());
+            return _insert(position, il.begin(), il.end());
         }
 
         // Erase.
@@ -968,13 +968,10 @@ namespace gdt
 
         // Insert multiple.
         template<typename InputIterator>
-        requires std::is_base_of_v<
-            std::input_iterator_tag,
-            typename std::iterator_traits<InputIterator>::iterator_category>
         constexpr iterator _insert(
             const_iterator position,
-            InputIterator& first,
-            InputIterator& last)
+            InputIterator first,
+            InputIterator last)
         {
             gdt_assume(position >= begin());
             gdt_assume(position <= end());
@@ -1013,9 +1010,8 @@ namespace gdt
                     return old_end;
                 }
 
-                // Shift all elements from position onward back otherwise.
-                // TODO
-                gdt_panic();
+                // Insert in the middle of the current buffer otherwise.
+                return _insert_mid_buffer(new_size, position, first, last);
             }
             else
             {
@@ -1040,9 +1036,9 @@ namespace gdt
             Args&&... args)
         noexcept
         {
+            gdt_assume(new_capacity > _size);
             gdt_assume(position >= begin());
             gdt_assume(position <= end());
-            gdt_assume(new_capacity > _size);
 
             // Migrate up to position.
             auto old_beg = begin();
@@ -1079,10 +1075,10 @@ namespace gdt
             ForwardIterator& last)
         noexcept
         {
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
             gdt_assume(new_capacity >= new_size);
             gdt_assume(new_size > _size);
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
 
             // Migrate up to position.
             auto old_beg = begin();
@@ -1110,6 +1106,77 @@ namespace gdt
 
             // Done.
             return new_pos;
+        }
+
+        // Insert in the middle of the current buffer.
+        template<typename InputIterator>
+        constexpr iterator _insert_mid_buffer(
+            size_type new_size,
+            const_iterator position,
+            InputIterator first,
+            InputIterator last)
+        noexcept
+        {
+            gdt_assume(new_size > _size);
+            gdt_assume(new_size <= _capacity);
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            // Shift all elements from position onward back.
+            auto beg = begin();
+            auto old_end = end();
+
+            auto dst = beg + new_size;
+            auto src = beg + _size;
+            auto pos = position - beg + beg;
+
+            while (dst > old_end && src > pos)
+            {
+                _construct(std::addressof(*--dst), std::move(*--src));
+            }
+
+            while (src > pos)
+            {
+                *--dst = std::move(*--src);
+            }
+
+            // Insert from back to front if possible
+            // to match above shift memory access pattern.
+            // Insert front to back otherwise.
+            if constexpr (std::is_base_of_v<
+                std::bidirectional_iterator_tag,
+                typename std::iterator_traits<InputIterator>::
+                    iterator_category>)
+            {
+                while (dst > old_end)
+                {
+                    _construct(std::addressof(*--dst), *--last);
+                }
+
+                while (dst > pos)
+                {
+                    *--dst = *--last;
+                }
+            }
+            else
+            {
+                auto dst_end = dst;
+                dst = pos;
+
+                while (dst < dst_end && dst < old_end)
+                {
+                    *dst++ = *first++;
+                }
+
+                while (dst < dst_end)
+                {
+                    _construct(std::addressof(*dst++, *first++));
+                }
+            }
+
+            // Done.
+            _size = new_size;
+            return pos;
         }
     };
 
