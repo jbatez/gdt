@@ -600,7 +600,65 @@ namespace gdt
         constexpr iterator insert(
             const_iterator position,
             InputIterator first,
-            InputIterator last);
+            InputIterator last)
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            if constexpr (std::is_base_of_v<
+                std::forward_iterator_tag,
+                typename std::iterator_traits<InputIterator>::
+                    iterator_category>)
+            {
+                // We can determine the new size ahead
+                // of time with forward iterators.
+                auto d = std::distance(first, last);
+                auto u = std::make_unsigned_t<decltype(d)>(d);
+                gdt_assert(u <= max_size() - _size);
+                auto new_size = size_type(_size + size_type(u));
+
+                // Insert in the middle of migration
+                // if reallocation is necessary.
+                if (_capacity < new_size)
+                {
+                    auto new_capacity = _choose_new_capacity(new_size);
+                    auto new_ptr = _allocate(new_capacity);
+                    return _insert_migrate(
+                        new_ptr, new_capacity, new_size, position, first, last);
+                }
+
+                // Emplace back if given the end iterator.
+                auto old_end = end();
+                if (position == old_end)
+                {
+                    auto dst = old_end;
+                    for (; first != last; ++first, ++dst)
+                    {
+                        _construct(std::addressof(*dst), *first);
+                        ++_size;
+                    }
+                    return old_end;
+                }
+
+                // TODO
+                gdt_panic();
+            }
+            else
+            {
+                // We can't determine the new size ahead of time without forward
+                // iterators. The best we can do is insert one at a time.
+                auto beg = begin();
+                auto pos_idx = position - beg + beg;
+
+                auto dst_idx = pos_idx;
+                for (; first != last; ++first, ++dst_idx)
+                {
+                    insert(begin() + dst_idx, *first);
+                }
+
+                return begin() + pos_idx;
+            }
+        }
 
         // Insert.
         constexpr iterator insert(
@@ -995,6 +1053,50 @@ namespace gdt
             _ptr = new_ptr;
             _capacity = new_capacity;
             _size += 1;
+
+            // Done.
+            return new_pos;
+        }
+
+        // Insert in the middle of migration.
+        template<typename ForwardIterator>
+        constexpr iterator _insert_migrate(
+            pointer new_ptr,
+            size_type new_capacity,
+            size_type new_size,
+            const_iterator position,
+            ForwardIterator& first,
+            ForwardIterator& last)
+        noexcept
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+            gdt_assume(new_capacity >= new_size);
+            gdt_assume(new_size > _size);
+
+            // Migrate up to position.
+            auto old_beg = begin();
+            auto new_beg = iterator(new_ptr);
+            auto pos_idx = position - old_beg;
+            _migrate(new_beg, old_beg, size_type(pos_idx));
+
+            // Emplace at position.
+            auto new_pos = new_beg + pos_idx;
+            auto dst = new_pos;
+            for (; first != last; ++first, ++dst)
+            {
+                _construct(std::addressof(*dst), *first);
+            }
+
+            // Migrate after position.
+            auto old_pos = old_beg + pos_idx;
+            _migrate(dst, old_pos, (_size - size_type(pos_idx)));
+
+            // Free the old buffer and use the new one.
+            _deallocate();
+            _ptr = new_ptr;
+            _capacity = new_capacity;
+            _size = new_size;
 
             // Done.
             return new_pos;
