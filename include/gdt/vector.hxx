@@ -356,13 +356,13 @@ namespace gdt
         }
 
         // Reverse end.
-        constexpr reverse_iterator rhs_end() noexcept
+        constexpr reverse_iterator rend() noexcept
         {
             return reverse_iterator(begin());
         }
 
         // Reverse end.
-        constexpr const_reverse_iterator rhs_end() const noexcept
+        constexpr const_reverse_iterator rend() const noexcept
         {
             return const_reverse_iterator(begin());
         }
@@ -388,7 +388,7 @@ namespace gdt
         // Const reverse end.
         constexpr const_reverse_iterator crend() const noexcept
         {
-            return rhs_end();
+            return rend();
         }
 
         // Empty?

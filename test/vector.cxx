@@ -313,6 +313,172 @@ consteval int test_consteval()
         gdt_assert(v2[2] == 3);
     }
 
+    // Initializer list assignment.
+    {
+        vector v = {1, 2, 3};
+        v = {4, 5};
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 2);
+        gdt_assert(v[0] == 4);
+        gdt_assert(v[1] == 5);
+    }
+
+    // Range assign larger.
+    {
+        vector v = {1, 2};
+        auto il = {3, 4, 5};
+        v.assign(il.begin(), il.end());
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 3);
+        gdt_assert(v[1] == 4);
+        gdt_assert(v[2] == 5);
+    }
+
+    // Range assign smaller.
+    {
+        vector v = {1, 2, 3};
+        auto il = {4, 5};
+        v.assign(il.begin(), il.end());
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 2);
+        gdt_assert(v[0] == 4);
+        gdt_assert(v[1] == 5);
+    }
+
+    // Fill assign larger.
+    {
+        vector v = {1, 2};
+        v.assign(3, 4);
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 4);
+        gdt_assert(v[1] == 4);
+        gdt_assert(v[2] == 4);
+    }
+
+    // Fill assign smaller.
+    {
+        vector v = {1, 2, 3};
+        v.assign(2, 4);
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 2);
+        gdt_assert(v[0] == 4);
+        gdt_assert(v[1] == 4);
+    }
+
+    // Initializer list assign.
+    {
+        vector v = {1, 2, 3};
+        v.assign({4, 5});
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 2);
+        gdt_assert(v[0] == 4);
+        gdt_assert(v[1] == 5);
+    }
+
+    // Get allocator.
+    {
+        vector v({1, 2, 3}, not_always_equal{.id = 123});
+        gdt_assert(v.get_allocator().id == 123);
+    }
+
+    // Begin/end.
+    {
+        vector v = {1, 2, 3};
+        auto itr = v.begin();
+        gdt_assert(&*itr++ == &v[0]);
+        gdt_assert(&*itr++ == &v[1]);
+        gdt_assert(&*itr++ == &v[2]);
+        gdt_assert(itr == v.end());
+    }
+
+    // Const begin/end.
+    {
+        const vector v = {1, 2, 3};
+        auto itr = v.begin();
+        gdt_assert(&*itr++ == &v[0]);
+        gdt_assert(&*itr++ == &v[1]);
+        gdt_assert(&*itr++ == &v[2]);
+        gdt_assert(itr == v.end());
+    }
+
+    // Reverse begin/end.
+    {
+        vector v = {1, 2, 3};
+        auto itr = v.rbegin();
+        gdt_assert(&*itr++ == &v[2]);
+        gdt_assert(&*itr++ == &v[1]);
+        gdt_assert(&*itr++ == &v[0]);
+        gdt_assert(itr == v.rend());
+    }
+
+    // Const reverse begin/end.
+    {
+        const vector v = {1, 2, 3};
+        auto itr = v.rbegin();
+        gdt_assert(&*itr++ == &v[2]);
+        gdt_assert(&*itr++ == &v[1]);
+        gdt_assert(&*itr++ == &v[0]);
+        gdt_assert(itr == v.rend());
+    }
+
+    // Explicitly const iterators.
+    {
+        vector v = {1, 2, 3};
+        gdt_assert(v.cbegin() == v.begin());
+        gdt_assert(v.cend() == v.end());
+        gdt_assert(v.crbegin() == v.rbegin());
+        gdt_assert(v.crend() == v.rend());
+    }
+
+    // Empty.
+    {
+        vector<int> v;
+        gdt_assert(v.empty() == true);
+        v.push_back(123);
+        gdt_assert(v.empty() == false);
+        v.pop_back();
+        gdt_assert(v.empty() == true);
+    }
+
+    // Resize over capacity.
+    {
+        vector v = {1, 2};
+        v.resize(3);
+        gdt_assert(v.capacity() == 4);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 0);
+    }
+
+    // Resize within capacity.
+    {
+        vector v = {1, 2};
+        v.reserve(3);
+        auto data = v.data();
+        v.resize(3);
+        gdt_assert(v.data() == data);
+        gdt_assert(v.capacity() == 4);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 0);
+    }
+
+    // Resize shrink.
+    {
+        vector v = {1, 2, 3};
+        auto data = v.data();
+        v.resize(2);
+        gdt_assert(v.data() == data);
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 2);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+    }
+
     // Success.
     return 0;
 }
