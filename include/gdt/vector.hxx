@@ -549,18 +549,33 @@ namespace gdt
         constexpr void pop_back()
         {
             _destroy(std::addressof(back()));
-            _size--;
+            --_size;
         }
 
         // Emplace.
         template<typename... Args>
-        constexpr iterator emplace(const_iterator position, Args&&... args);
+        constexpr iterator emplace(const_iterator position, Args&&... args)
+        {
+            constexpr bool must_use_ctor = true;
+            return _emplace_or_insert<must_use_ctor>(
+                position, std::forward<Args>(args)...);
+        }
 
         // Insert.
-        constexpr iterator insert(const_iterator position, const T& value);
+        constexpr iterator insert(const_iterator position, const T& value)
+        {
+            constexpr bool must_use_ctor = false;
+            return _emplace_or_insert<must_use_ctor>(
+                position, value);
+        }
 
         // Insert.
-        constexpr iterator insert(const_iterator position, T&& value);
+        constexpr iterator insert(const_iterator position, T&& value)
+        {
+            constexpr bool must_use_ctor = false;
+            return _emplace_or_insert<must_use_ctor>(
+                position, std::move(value));
+        }
 
         // Insert.
         constexpr iterator insert(
@@ -602,11 +617,11 @@ namespace gdt
             auto beg = begin();
             auto first_idx = first - beg;
             auto last_idx = last - beg;
-            auto len = size_type(last_idx - first_idx);
 
             auto src_begin = beg + last_idx;
+            auto src_end = end();
             auto dst_begin = beg + first_idx;
-            auto dst_end = std::move(src_begin, end(), dst_begin);
+            auto dst_end = std::move(src_begin, src_end, dst_begin);
             _truncate(dst_end);
 
             return dst_begin;
@@ -770,6 +785,14 @@ namespace gdt
             }
         }
 
+        // Destroy and construct with `noexcept`.
+        template<typename... Args>
+        constexpr void _replace(T* p, Args&&... args) noexcept
+        {
+            _destroy(p);
+            _construct(p, std::forward<Args>(args)...);
+        }
+
         // Move and destroy `n` elements from `src` to `dst`.
         constexpr void _migrate(iterator dst, iterator src, size_type n)
         noexcept
@@ -867,6 +890,98 @@ namespace gdt
             {
                 push_back(fill_value);
             }
+        }
+
+        // Emplace or insert.
+        // Set `must_use_ctor = true` for emplace.
+        // Set `must_use_ctor = false` for insert.
+        template<bool must_use_ctor, typename... Args>
+        constexpr iterator _emplace_or_insert(
+            const_iterator position,
+            Args&&... args)
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            // Emplace in the middle of migration if reallocation is necessary.
+            if (_capacity == _size)
+            {
+                auto new_capacity = _choose_next_capacity();
+                auto new_ptr = _allocate(new_capacity);
+                return _migrate_emplace(
+                    new_ptr, new_capacity, position,
+                    std::forward<Args>(args)...);
+            }
+
+            // Emplace at the back if given the end iterator.
+            auto old_end = end();
+            if (position == old_end)
+            {
+                auto p = std::addressof(*old_end);
+                _construct(p, std::forward<Args>(args)...);
+                ++_size;
+                return old_end;
+            }
+
+            // Shift all elements back one index otherwise.
+            auto old_end_m1 = old_end - 1;
+            _construct(std::addressof(*old_end), std::move(*old_end_m1));
+            ++_size;
+
+            auto beg = begin();
+            auto pos = position - beg + beg;
+            std::move_backward(pos, old_end_m1, old_end);
+
+            // Emplace/insert in the newly-created gap.
+            if constexpr (must_use_ctor)
+            {
+                _replace(std::addressof(*pos), std::forward<Args>(args)...);
+            }
+            else
+            {
+                static_assert(sizeof...(Args) == 1);
+                *pos = (std::forward<Args>(args), ...);
+            }
+
+            // Done.
+            return pos;
+        }
+
+        // Emplace in the middle of migration.
+        template<typename... Args>
+        constexpr iterator _migrate_emplace(
+            pointer new_ptr,
+            size_type new_capacity,
+            const_iterator position,
+            Args&&... args)
+        noexcept
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+            gdt_assume(new_capacity > _size);
+
+            // Migrate up to position.
+            auto old_beg = begin();
+            auto new_beg = iterator(new_ptr);
+            auto pos_idx = position - old_beg;
+            _migrate(new_beg, old_beg, size_type(pos_idx));
+
+            // Emplace at position.
+            auto new_pos = new_beg + pos_idx;
+            _construct(std::addressof(*new_pos), std::forward<Args>(args)...);
+
+            // Migrate after position.
+            auto old_pos = old_beg + pos_idx;
+            _migrate(new_pos + 1, old_pos, (_size - size_type(pos_idx)));
+
+            // Free the old buffer and use the new one.
+            _deallocate();
+            _ptr = new_ptr;
+            _capacity = new_capacity;
+            _size += 1;
+
+            // Done.
+            return new_pos;
         }
     };
 
