@@ -14,20 +14,20 @@
 
 namespace gdt_detail
 {
-    // Vector iterator.
+    // Dynarr iterator.
     template<typename T, typename Allocator>
-    class vector_iterator;
+    class dynarr_iterator;
 
-    // Vector const iterator.
+    // Dynarr const iterator.
     template<typename T, typename Allocator>
-    class vector_const_iterator;
+    class dynarr_const_iterator;
 }
 
 namespace gdt
 {
-    // Vector.
+    // Dynamic array.
     template<typename T, typename Allocator = allocator<T>>
-    class vector
+    class dynarr
     {
     public:
         // Member types.
@@ -39,19 +39,19 @@ namespace gdt
         using const_reference = const value_type&;
         using size_type = typename std::allocator_traits<Allocator>::size_type;
         using difference_type = typename std::allocator_traits<Allocator>::difference_type;
-        using iterator = gdt_detail::vector_iterator<T, Allocator>;
-        using const_iterator = gdt_detail::vector_const_iterator<T, Allocator>;
+        using iterator = gdt_detail::dynarr_iterator<T, Allocator>;
+        using const_iterator = gdt_detail::dynarr_const_iterator<T, Allocator>;
         using reverse_iterator = std::reverse_iterator<iterator>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
         // Constructor.
-        constexpr vector() noexcept(noexcept(Allocator()))
+        constexpr dynarr() noexcept(noexcept(Allocator()))
         :
-            vector(Allocator())
+            dynarr(Allocator())
         {}
 
         // Constructor.
-        explicit constexpr vector(const Allocator& allocator) noexcept
+        explicit constexpr dynarr(const Allocator& allocator) noexcept
         :
             _allocator{allocator},
             _ptr{nullptr},
@@ -60,22 +60,22 @@ namespace gdt
         {}
 
         // Constructor.
-        explicit constexpr vector(
+        explicit constexpr dynarr(
             size_type len,
             const Allocator& allocator = Allocator())
         :
-            vector(allocator)
+            dynarr(allocator)
         {
             resize(len);
         }
 
         // Constructor.
-        constexpr vector(
+        constexpr dynarr(
             size_type len,
             const T& fill_value,
             const Allocator& allocator = Allocator())
         :
-            vector(allocator)
+            dynarr(allocator)
         {
             assign(len, fill_value);
         }
@@ -85,25 +85,25 @@ namespace gdt
         requires std::is_base_of_v<
             std::input_iterator_tag,
             typename std::iterator_traits<InputIterator>::iterator_category>
-        constexpr vector(
+        constexpr dynarr(
             InputIterator first,
             InputIterator last,
             const Allocator& allocator = Allocator())
         :
-            vector(allocator)
+            dynarr(allocator)
         {
             assign(first, last);
         }
 
         // Constructor.
-        constexpr vector(const vector& other)
+        constexpr dynarr(const dynarr& other)
         :
-            vector(other, std::allocator_traits<Allocator>::
+            dynarr(other, std::allocator_traits<Allocator>::
                 select_on_container_copy_construction(other._allocator))
         {}
 
         // Constructor.
-        constexpr vector(vector&& other) noexcept
+        constexpr dynarr(dynarr&& other) noexcept
         :
             _allocator{std::move(other._allocator)},
             _ptr{std::exchange(other._ptr, nullptr)},
@@ -112,15 +112,15 @@ namespace gdt
         {}
 
         // Constructor.
-        constexpr vector(const vector& other, const Allocator& allocator)
+        constexpr dynarr(const dynarr& other, const Allocator& allocator)
         :
-            vector(other.begin(), other.end(), allocator)
+            dynarr(other.begin(), other.end(), allocator)
         {}
 
         // Constructor.
-        constexpr vector(vector&& other, const Allocator& allocator)
+        constexpr dynarr(dynarr&& other, const Allocator& allocator)
         :
-            vector(allocator)
+            dynarr(allocator)
         {
             if constexpr (
                 std::allocator_traits<Allocator>::is_always_equal::value)
@@ -139,21 +139,21 @@ namespace gdt
         }
 
         // Constructor.
-        constexpr vector(
+        constexpr dynarr(
             std::initializer_list<T> il,
             const Allocator& allocator = Allocator())
         :
-            vector(il.begin(), il.end(), allocator)
+            dynarr(il.begin(), il.end(), allocator)
         {}
 
         // Destructor.
-        constexpr ~vector()
+        constexpr ~dynarr()
         {
             _destroy_all_and_deallocate();
         }
 
         // Assignment.
-        constexpr vector& operator=(const vector& other)
+        constexpr dynarr& operator=(const dynarr& other)
         {
             if constexpr (
                 std::allocator_traits<Allocator>::
@@ -175,7 +175,7 @@ namespace gdt
         }
 
         // Assignment.
-        constexpr vector& operator=(vector&& other)
+        constexpr dynarr& operator=(dynarr&& other)
         noexcept(
             std::allocator_traits<Allocator>::
                 propagate_on_container_move_assignment::value ||
@@ -228,7 +228,7 @@ namespace gdt
         }
 
         // Assignment.
-        constexpr vector& operator=(std::initializer_list<T> il)
+        constexpr dynarr& operator=(std::initializer_list<T> il)
         {
             assign(il);
             return *this;
@@ -645,7 +645,7 @@ namespace gdt
         }
 
         // Swap.
-        constexpr void swap(vector& other)
+        constexpr void swap(dynarr& other)
         noexcept(
             std::allocator_traits<Allocator>::
                 propagate_on_container_swap::value ||
@@ -671,7 +671,7 @@ namespace gdt
         }
 
         // Swap.
-        friend constexpr void swap(vector& lhs, vector& rhs)
+        friend constexpr void swap(dynarr& lhs, dynarr& rhs)
         noexcept(noexcept(lhs.swap(rhs)))
         {
             lhs.swap(rhs);
@@ -684,13 +684,13 @@ namespace gdt
         }
 
         // Equality.
-        friend constexpr bool operator==(const vector& lhs, const vector& rhs)
+        friend constexpr bool operator==(const dynarr& lhs, const dynarr& rhs)
         {
             return std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
         }
 
         // Comparison.
-        friend constexpr auto operator<=>(const vector& lhs, const vector& rhs)
+        friend constexpr auto operator<=>(const dynarr& lhs, const dynarr& rhs)
         -> decltype(lhs[0] <=> rhs[0])
         {
             // TODO: Use lexicographical_compare_three_way.
@@ -736,8 +736,8 @@ namespace gdt
         size_type _capacity;
         size_type _size;
 
-        // Take ownership of another vector's buffer.
-        constexpr void _take_buffer(vector& other) noexcept
+        // Take ownership of another dynarr's buffer.
+        constexpr void _take_buffer(dynarr& other) noexcept
         {
             _ptr = std::exchange(other._ptr, nullptr);
             _capacity = std::exchange(other._capacity, 0);
@@ -1183,33 +1183,33 @@ namespace gdt
         typename InputIterator,
         typename Allocator = allocator<
             typename std::iterator_traits<InputIterator>::value_type>>
-    vector(InputIterator, InputIterator, Allocator = Allocator()) ->
-    vector<typename std::iterator_traits<InputIterator>::value_type, Allocator>;
+    dynarr(InputIterator, InputIterator, Allocator = Allocator()) ->
+    dynarr<typename std::iterator_traits<InputIterator>::value_type, Allocator>;
 
     // Erase.
     template<typename T, typename Allocator, typename U>
-    constexpr typename vector<T, Allocator>::size_type
-    erase(vector<T, Allocator>& v, const U& value)
+    constexpr typename dynarr<T, Allocator>::size_type
+    erase(dynarr<T, Allocator>& a, const U& value)
     {
-        auto old_end = v.end();
-        auto new_end = std::remove(v.begin(), old_end, value);
-        using size_type = typename vector<T, Allocator>::size_type;
+        auto old_end = a.end();
+        auto new_end = std::remove(a.begin(), old_end, value);
+        using size_type = typename dynarr<T, Allocator>::size_type;
         auto count = size_type(old_end - new_end);
-        v.erase(new_end, old_end);
+        a.erase(new_end, old_end);
         return count;
     }
 
     // Erase if.
     template<typename T, typename Allocator, typename Pred>
-    constexpr typename vector<T, Allocator>::size_type
-    erase_if(vector<T, Allocator>& v, Pred&& pred)
+    constexpr typename dynarr<T, Allocator>::size_type
+    erase_if(dynarr<T, Allocator>& a, Pred&& pred)
     {
-        auto beg = v.begin();
-        auto old_end = v.end();
+        auto beg = a.begin();
+        auto old_end = a.end();
         auto new_end = std::remove_if(beg, old_end, std::forward<Pred>(pred));
-        using size_type = typename vector<T, Allocator>::size_type;
+        using size_type = typename dynarr<T, Allocator>::size_type;
         auto count = size_type(old_end - new_end);
-        v.erase(new_end, old_end);
+        a.erase(new_end, old_end);
         return count;
     }
 }
@@ -1218,13 +1218,13 @@ namespace gdt_detail
 {
     using namespace gdt;
 
-    // Vector iterator.
+    // Dynarr iterator.
     template<typename T, typename Allocator>
-    class vector_iterator
+    class dynarr_iterator
     {
     public:
         // Constructor.
-        constexpr vector_iterator() = default;
+        constexpr dynarr_iterator() = default;
 
         // Dereference.
         constexpr T& operator*() const
@@ -1233,7 +1233,7 @@ namespace gdt_detail
         }
 
         // Member access.
-        constexpr typename vector<T, Allocator>::pointer
+        constexpr typename dynarr<T, Allocator>::pointer
         operator->() const
         {
             return _ptr;
@@ -1241,82 +1241,82 @@ namespace gdt_detail
 
         // Subscript.
         constexpr T& operator[](
-            typename vector<T, Allocator>::difference_type i)
+            typename dynarr<T, Allocator>::difference_type i)
         const
         {
             return _ptr[_ptr_diff(i)];
         }
 
         // Pre-increment.
-        constexpr vector_iterator& operator++()
+        constexpr dynarr_iterator& operator++()
         {
             ++_ptr;
             return *this;
         }
 
         // Pre-decrement.
-        constexpr vector_iterator& operator--()
+        constexpr dynarr_iterator& operator--()
         {
             --_ptr;
             return *this;
         }
 
         // Post-increment.
-        constexpr vector_iterator operator++(int)
+        constexpr dynarr_iterator operator++(int)
         {
-            return vector_iterator(_ptr++);
+            return dynarr_iterator(_ptr++);
         }
 
         // Post-decrement.
-        constexpr vector_iterator operator--(int)
+        constexpr dynarr_iterator operator--(int)
         {
-            return vector_iterator(_ptr--);
+            return dynarr_iterator(_ptr--);
         }
 
         // Addition.
-        friend constexpr vector_iterator operator+(
-            const vector_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_iterator operator+(
+            const dynarr_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
-            return vector_iterator(lhs._ptr + _ptr_diff(rhs));
+            return dynarr_iterator(lhs._ptr + _ptr_diff(rhs));
         }
 
         // Addition.
-        friend constexpr vector_iterator operator+(
-            typename vector<T, Allocator>::difference_type lhs,
-            const vector_iterator& rhs)
+        friend constexpr dynarr_iterator operator+(
+            typename dynarr<T, Allocator>::difference_type lhs,
+            const dynarr_iterator& rhs)
         {
-            return vector_iterator(_ptr_diff(lhs) + rhs._ptr);
+            return dynarr_iterator(_ptr_diff(lhs) + rhs._ptr);
         }
 
         // Subtraction.
-        friend constexpr vector_iterator operator-(
-            const vector_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_iterator operator-(
+            const dynarr_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
-            return vector_iterator(lhs._ptr - _ptr_diff(rhs));
+            return dynarr_iterator(lhs._ptr - _ptr_diff(rhs));
         }
 
         // Subtraction.
-        friend constexpr typename vector<T, Allocator>::difference_type
-        operator-(const vector_iterator& lhs, const vector_iterator& rhs)
+        friend constexpr typename dynarr<T, Allocator>::difference_type
+        operator-(const dynarr_iterator& lhs, const dynarr_iterator& rhs)
         {
-            return _vec_diff(lhs._ptr - rhs._ptr);
+            return _da_diff(lhs._ptr - rhs._ptr);
         }
 
         // Addition assignment.
-        friend constexpr vector_iterator& operator+=(
-            vector_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_iterator& operator+=(
+            dynarr_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
             lhs._ptr += _ptr_diff(rhs);
             return lhs;
         }
 
         // Subtraction assignment.
-        friend constexpr vector_iterator& operator-=(
-            vector_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_iterator& operator-=(
+            dynarr_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
             lhs._ptr -= _ptr_diff(rhs);
             return lhs;
@@ -1324,67 +1324,67 @@ namespace gdt_detail
 
         // Equality.
         friend constexpr bool operator==(
-            const vector_iterator& lhs,
-            const vector_iterator& rhs)
+            const dynarr_iterator& lhs,
+            const dynarr_iterator& rhs)
         {
             return lhs._ptr == rhs._ptr;
         }
 
         // Comparison.
         friend constexpr std::strong_ordering operator<=>(
-            const vector_iterator& lhs,
-            const vector_iterator& rhs)
+            const dynarr_iterator& lhs,
+            const dynarr_iterator& rhs)
         {
             return lhs._ptr <=> rhs._ptr;
         }
 
     private:
         // Friends.
-        friend vector<T, Allocator>;
-        friend vector_const_iterator<T, Allocator>;
+        friend dynarr<T, Allocator>;
+        friend dynarr_const_iterator<T, Allocator>;
 
         // Member types.
-        using _pointer = typename vector<T, Allocator>::pointer;
+        using _pointer = typename dynarr<T, Allocator>::pointer;
         using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
-        using _vector_diff = typename vector<T, Allocator>::difference_type;
+        using _dynarr_diff = typename dynarr<T, Allocator>::difference_type;
 
         // Member variables.
         _pointer _ptr;
 
         // Constructor.
-        explicit constexpr vector_iterator(const _pointer& ptr)
+        explicit constexpr dynarr_iterator(const _pointer& ptr)
         :
             _ptr{ptr}
         {}
 
-        // Pointer diff from vector diff.
-        static constexpr _pointer_diff _ptr_diff(_vector_diff d)
+        // Pointer diff from dynarr diff.
+        static constexpr _pointer_diff _ptr_diff(_dynarr_diff d)
         {
             auto ret = _pointer_diff(d);
             gdt_assume(ret == d);
             return ret;
         }
 
-        // Vector diff from pointer diff.
-        static constexpr _vector_diff _vec_diff(_pointer_diff d)
+        // Dynarr diff from pointer diff.
+        static constexpr _dynarr_diff _da_diff(_pointer_diff d)
         {
-            auto ret = _vector_diff(d);
+            auto ret = _dynarr_diff(d);
             gdt_assume(ret == d);
             return ret;
         }
     };
 
-    // Vector const iterator.
+    // Dynarr const iterator.
     template<typename T, typename Allocator>
-    class vector_const_iterator
+    class dynarr_const_iterator
     {
     public:
         // Constructor.
-        constexpr vector_const_iterator() = default;
+        constexpr dynarr_const_iterator() = default;
 
         // Constructor.
-        constexpr vector_const_iterator(
-            const vector_iterator<T, Allocator>& other)
+        constexpr dynarr_const_iterator(
+            const dynarr_iterator<T, Allocator>& other)
         :
             _ptr{other._ptr}
         {}
@@ -1396,7 +1396,7 @@ namespace gdt_detail
         }
 
         // Member access.
-        constexpr typename vector<T, Allocator>::const_pointer
+        constexpr typename dynarr<T, Allocator>::const_pointer
         operator->() const
         {
             return _ptr;
@@ -1404,84 +1404,84 @@ namespace gdt_detail
 
         // Subscript.
         constexpr const T& operator[](
-            typename vector<T, Allocator>::difference_type i)
+            typename dynarr<T, Allocator>::difference_type i)
         const
         {
             return _ptr[_ptr_diff(i)];
         }
 
         // Pre-increment.
-        constexpr vector_const_iterator& operator++()
+        constexpr dynarr_const_iterator& operator++()
         {
             ++_ptr;
             return *this;
         }
 
         // Pre-decrement.
-        constexpr vector_const_iterator& operator--()
+        constexpr dynarr_const_iterator& operator--()
         {
             --_ptr;
             return *this;
         }
 
         // Post-increment.
-        constexpr vector_const_iterator operator++(int)
+        constexpr dynarr_const_iterator operator++(int)
         {
-            return vector_const_iterator(_ptr++);
+            return dynarr_const_iterator(_ptr++);
         }
 
         // Post-decrement.
-        constexpr vector_const_iterator operator--(int)
+        constexpr dynarr_const_iterator operator--(int)
         {
-            return vector_const_iterator(_ptr--);
+            return dynarr_const_iterator(_ptr--);
         }
 
         // Addition.
-        friend constexpr vector_const_iterator operator+(
-            const vector_const_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_const_iterator operator+(
+            const dynarr_const_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
-            return vector_const_iterator(lhs._ptr + _ptr_diff(rhs));
+            return dynarr_const_iterator(lhs._ptr + _ptr_diff(rhs));
         }
 
         // Addition.
-        friend constexpr vector_const_iterator operator+(
-            typename vector<T, Allocator>::difference_type lhs,
-            const vector_const_iterator& rhs)
+        friend constexpr dynarr_const_iterator operator+(
+            typename dynarr<T, Allocator>::difference_type lhs,
+            const dynarr_const_iterator& rhs)
         {
-            return vector_const_iterator(_ptr_diff(lhs) + rhs._ptr);
+            return dynarr_const_iterator(_ptr_diff(lhs) + rhs._ptr);
         }
 
         // Subtraction.
-        friend constexpr vector_const_iterator operator-(
-            const vector_const_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_const_iterator operator-(
+            const dynarr_const_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
-            return vector_const_iterator(lhs._ptr - _ptr_diff(rhs));
+            return dynarr_const_iterator(lhs._ptr - _ptr_diff(rhs));
         }
 
         // Subtraction.
-        friend constexpr typename vector<T, Allocator>::difference_type
+        friend constexpr typename dynarr<T, Allocator>::difference_type
         operator-(
-            const vector_const_iterator& lhs,
-            const vector_const_iterator& rhs)
+            const dynarr_const_iterator& lhs,
+            const dynarr_const_iterator& rhs)
         {
-            return _vec_diff(lhs._ptr - rhs._ptr);
+            return _da_diff(lhs._ptr - rhs._ptr);
         }
 
         // Addition assignment.
-        friend constexpr vector_const_iterator& operator+=(
-            vector_const_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_const_iterator& operator+=(
+            dynarr_const_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
             lhs._ptr += _ptr_diff(rhs);
             return lhs;
         }
 
         // Subtraction assignment.
-        friend constexpr vector_const_iterator& operator-=(
-            vector_const_iterator& lhs,
-            typename vector<T, Allocator>::difference_type rhs)
+        friend constexpr dynarr_const_iterator& operator-=(
+            dynarr_const_iterator& lhs,
+            typename dynarr<T, Allocator>::difference_type rhs)
         {
             lhs._ptr -= _ptr_diff(rhs);
             return lhs;
@@ -1489,50 +1489,50 @@ namespace gdt_detail
 
         // Equality.
         friend constexpr bool operator==(
-            const vector_const_iterator& lhs,
-            const vector_const_iterator& rhs)
+            const dynarr_const_iterator& lhs,
+            const dynarr_const_iterator& rhs)
         {
             return lhs._ptr == rhs._ptr;
         }
 
         // Comparison.
         friend constexpr std::strong_ordering operator<=>(
-            const vector_const_iterator& lhs,
-            const vector_const_iterator& rhs)
+            const dynarr_const_iterator& lhs,
+            const dynarr_const_iterator& rhs)
         {
             return lhs._ptr <=> rhs._ptr;
         }
 
     private:
         // Friends.
-        friend vector<T, Allocator>;
+        friend dynarr<T, Allocator>;
 
         // Member types.
-        using _pointer = typename vector<T, Allocator>::const_pointer;
+        using _pointer = typename dynarr<T, Allocator>::const_pointer;
         using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
-        using _vector_diff = typename vector<T, Allocator>::difference_type;
+        using _dynarr_diff = typename dynarr<T, Allocator>::difference_type;
 
         // Member variables.
         _pointer _ptr;
 
         // Constructor.
-        explicit constexpr vector_const_iterator(const _pointer& ptr)
+        explicit constexpr dynarr_const_iterator(const _pointer& ptr)
         :
             _ptr{ptr}
         {}
 
-        // Pointer diff from vector diff.
-        static constexpr _pointer_diff _ptr_diff(_vector_diff d)
+        // Pointer diff from dynarr diff.
+        static constexpr _pointer_diff _ptr_diff(_dynarr_diff d)
         {
             auto ret = _pointer_diff(d);
             gdt_assume(ret == d);
             return ret;
         }
 
-        // Vector diff from pointer diff.
-        static constexpr _vector_diff _vec_diff(_pointer_diff d)
+        // Dynarr diff from pointer diff.
+        static constexpr _dynarr_diff _da_diff(_pointer_diff d)
         {
-            auto ret = _vector_diff(d);
+            auto ret = _dynarr_diff(d);
             gdt_assume(ret == d);
             return ret;
         }
@@ -1541,27 +1541,27 @@ namespace gdt_detail
 
 namespace std
 {
-    // Vector iterator traits.
+    // Dynarr iterator traits.
     template<typename T, typename Allocator>
-    struct iterator_traits<gdt_detail::vector_iterator<T, Allocator>>
+    struct iterator_traits<gdt_detail::dynarr_iterator<T, Allocator>>
     {
         using iterator_concept = contiguous_iterator_tag;
         using iterator_category = random_access_iterator_tag;
-        using value_type = typename gdt::vector<T, Allocator>::value_type;
-        using difference_type = typename gdt::vector<T, Allocator>::difference_type;
-        using pointer = typename gdt::vector<T, Allocator>::pointer;
-        using reference = typename gdt::vector<T, Allocator>::reference;
+        using value_type = typename gdt::dynarr<T, Allocator>::value_type;
+        using difference_type = typename gdt::dynarr<T, Allocator>::difference_type;
+        using pointer = typename gdt::dynarr<T, Allocator>::pointer;
+        using reference = typename gdt::dynarr<T, Allocator>::reference;
     };
 
-    // Vector const iterator traits.
+    // Dynarr const iterator traits.
     template<typename T, typename Allocator>
-    struct iterator_traits<gdt_detail::vector_const_iterator<T, Allocator>>
+    struct iterator_traits<gdt_detail::dynarr_const_iterator<T, Allocator>>
     {
         using iterator_concept = contiguous_iterator_tag;
         using iterator_category = random_access_iterator_tag;
-        using value_type = typename gdt::vector<T, Allocator>::value_type;
-        using difference_type = typename gdt::vector<T, Allocator>::difference_type;
-        using pointer = typename gdt::vector<T, Allocator>::const_pointer;
-        using reference = typename gdt::vector<T, Allocator>::const_reference;
+        using value_type = typename gdt::dynarr<T, Allocator>::value_type;
+        using difference_type = typename gdt::dynarr<T, Allocator>::difference_type;
+        using pointer = typename gdt::dynarr<T, Allocator>::const_pointer;
+        using reference = typename gdt::dynarr<T, Allocator>::const_reference;
     };
 }
