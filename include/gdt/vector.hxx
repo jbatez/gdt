@@ -143,10 +143,8 @@ namespace gdt
             std::initializer_list<T> il,
             const Allocator& allocator = Allocator())
         :
-            vector(allocator)
-        {
-            assign(il);
-        }
+            vector(il.begin(), il.end(), allocator)
+        {}
 
         // Destructor.
         constexpr ~vector()
@@ -453,14 +451,14 @@ namespace gdt
         // Subscript.
         constexpr reference operator[](size_type i)
         {
-            gdt_assume(i < max_size());
+            gdt_assume(i <= _capacity);
             return begin()[difference_type(i)];
         }
 
         // Subscript.
         constexpr const_reference operator[](size_type i) const
         {
-            gdt_assume(i < max_size());
+            gdt_assume(i <= _capacity);
             return begin()[difference_type(i)];
         }
 
@@ -584,7 +582,7 @@ namespace gdt
             size_type fill_len,
             const T& fill_value)
         {
-            gdt_assert(fill_len <= max_size());
+            gdt_assert(fill_len <= max_size() - size());
             auto ptr = std::addressof(fill_value);
             return _insert(
                 position,

@@ -479,6 +479,177 @@ consteval int test_consteval()
         gdt_assert(v[1] == 2);
     }
 
+    // Resize over capacity.
+    {
+        vector v = {1, 2};
+        v.resize(3, 4);
+        gdt_assert(v.capacity() == 4);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 4);
+    }
+
+    // Resize within capacity.
+    {
+        vector v = {1, 2};
+        v.reserve(3);
+        auto data = v.data();
+        v.resize(3, 4);
+        gdt_assert(v.data() == data);
+        gdt_assert(v.capacity() == 4);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 4);
+    }
+
+    // Resize shrink.
+    {
+        vector v = {1, 2, 3};
+        auto data = v.data();
+        v.resize(2, 4);
+        gdt_assert(v.data() == data);
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 2);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+    }
+
+    // Reserve.
+    {
+        vector v = {1, 2, 3};
+
+        v.reserve(45);
+        gdt_assert(v.capacity() == 45);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 3);
+
+        v.reserve(46);
+        auto data = v.data();
+        gdt_assert(v.capacity() == 90);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 3);
+
+        v.reserve(47);
+        gdt_assert(v.data() == data);
+        gdt_assert(v.capacity() == 90);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 3);
+    }
+
+    // Shrink to fit.
+    {
+        vector v = {1, 2, 3};
+
+        auto data = v.data();
+        v.shrink_to_fit();
+        gdt_assert(v.data() == data);
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 3);
+
+        v.reserve(45);
+        v.shrink_to_fit();
+        gdt_assert(v.capacity() == 3);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 3);
+    }
+
+    // At.
+    {
+        vector v = {1, 2, 3};
+        gdt_assert(&v.at(0) == &v[0]);
+        gdt_assert(&v.at(1) == &v[1]);
+        gdt_assert(&v.at(2) == &v[2]);
+    }
+
+    // Const at.
+    {
+        const vector v = {1, 2, 3};
+        gdt_assert(&v.at(0) == &v[0]);
+        gdt_assert(&v.at(1) == &v[1]);
+        gdt_assert(&v.at(2) == &v[2]);
+    }
+
+    // Front.
+    {
+        vector v = {1, 2, 3};
+        gdt_assert(&v.front() == &v[0]);
+    }
+
+    // Const front.
+    {
+        const vector v = {1, 2, 3};
+        gdt_assert(&v.front() == &v[0]);
+    }
+
+    // Back.
+    {
+        vector v = {1, 2, 3};
+        gdt_assert(&v.back() == &v[2]);
+    }
+
+    // Const back.
+    {
+        const vector v = {1, 2, 3};
+        gdt_assert(&v.back() == &v[2]);
+    }
+
+    // Emplace back.
+    {
+        vector v = {1, 2};
+
+        v.emplace_back();
+        gdt_assert(v.capacity() == 4);
+        gdt_assert(v.size() == 3);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 0);
+
+        auto data = v.data();
+        v.emplace_back(4);
+        gdt_assert(v.data() == data);
+        gdt_assert(v.capacity() == 4);
+        gdt_assert(v.size() == 4);
+        gdt_assert(v[0] == 1);
+        gdt_assert(v[1] == 2);
+        gdt_assert(v[2] == 0);
+        gdt_assert(v[3] == 4);
+    }
+
+    // Push back.
+    {
+        const vector v1 = {1, 2};
+        vector v2 = {{vector{3, 4}}};
+        v2.push_back(v1);
+        gdt_assert((v1 == vector{1, 2}));
+        gdt_assert((v2 == vector{vector{3, 4}, vector{1, 2}}));
+    }
+
+    // Push back move.
+    {
+        vector v1 = {1, 2};
+        vector v2 = {{vector{3, 4}}};
+        auto data = v1.data();
+        v2.push_back(std::move(v1));
+        gdt_assert((v1.data() == nullptr));
+        gdt_assert((v2 == vector{vector{3, 4}, vector{1, 2}}));
+        gdt_assert((v2[1].data() == data));
+    }
+
+    // TODO: More.
+
     // Success.
     return 0;
 }
