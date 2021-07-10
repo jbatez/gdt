@@ -91,11 +91,11 @@ consteval int test_consteval()
     {
         dynarr a1 = {1, 2, 3};
         auto data = a1.data();
+        auto capacity = a1.capacity();
         dynarr a2 = std::move(a1);
-        gdt_assert(a1.data() == nullptr);
+        gdt_assert(a1.data() != data);
         gdt_assert(a2.data() == data);
-        gdt_assert(a1.capacity() == 0);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a1.size() == 0);
         gdt_assert(a2.size() == 3);
     }
@@ -104,11 +104,11 @@ consteval int test_consteval()
     {
         dynarr a1({1, 2, 3}, gdt::allocator<int>());
         auto data = a1.data();
+        auto capacity = a1.capacity();
         dynarr a2(std::move(a1), gdt::allocator<int>());
-        gdt_assert(a1.data() == nullptr);
+        gdt_assert(a1.data() != data);
         gdt_assert(a2.data() == data);
-        gdt_assert(a1.capacity() == 0);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a1.size() == 0);
         gdt_assert(a2.size() == 3);
     }
@@ -117,12 +117,12 @@ consteval int test_consteval()
     {
         dynarr a1({1, 2, 3}, not_always_equal{.id = 45});
         auto data = a1.data();
+        auto capacity = a1.capacity();
         dynarr a2(std::move(a1), not_always_equal{.id = 45});
         gdt_assert(a2.get_allocator().id == 45);
-        gdt_assert(a1.data() == nullptr);
+        gdt_assert(a1.data() != data);
         gdt_assert(a2.data() == data);
-        gdt_assert(a1.capacity() == 0);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a1.size() == 0);
         gdt_assert(a2.size() == 3);
     }
@@ -131,12 +131,13 @@ consteval int test_consteval()
     {
         dynarr a1({1, 2, 3}, not_always_equal{.id = 45});
         auto data = a1.data();
+        auto capacity = a1.capacity();
         dynarr a2(std::move(a1), not_always_equal{.id = 67});
         gdt_assert(a2.get_allocator().id == 67);
         gdt_assert(a1.data() == data);
         gdt_assert(a2.data() != data);
-        gdt_assert(a1.capacity() == 3);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a1.capacity() == capacity);
+        gdt_assert(a2.capacity() >= 3);
         gdt_assert(a1.size() == 3);
         gdt_assert(a2.size() == 3);
     }
@@ -155,9 +156,10 @@ consteval int test_consteval()
         const dynarr a1 = {1, 2};
         dynarr a2 = {3, 4, 5};
         auto data = a2.data();
+        auto capacity = a2.capacity();
         a2 = a1;
         gdt_assert(a2.data() == data);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a2.size() == 2);
         gdt_assert(a2[0] == 1);
         gdt_assert(a2[1] == 2);
@@ -168,10 +170,11 @@ consteval int test_consteval()
         const dynarr a1({1, 2}, not_always_equal{.id = 67});
         dynarr a2({3, 4, 5}, not_always_equal{.id = 67});
         auto data = a2.data();
+        auto capacity = a2.capacity();
         a2 = a1;
         gdt_assert(a2.get_allocator().id == 67);
         gdt_assert(a2.data() == data);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a2.size() == 2);
         gdt_assert(a2[0] == 1);
         gdt_assert(a2[1] == 2);
@@ -185,7 +188,7 @@ consteval int test_consteval()
         a2 = a1;
         gdt_assert(a2.get_allocator().id == 67);
         gdt_assert(a2.data() != data);
-        gdt_assert(a2.capacity() == 2);
+        gdt_assert(a2.capacity() >= 2);
         gdt_assert(a2.size() == 2);
         gdt_assert(a2[0] == 1);
         gdt_assert(a2[1] == 2);
@@ -196,10 +199,11 @@ consteval int test_consteval()
         const dynarr a1({1, 2}, no_propagate{{.id = 67}});
         dynarr a2({3, 4, 5}, no_propagate{{.id = 67}});
         auto data = a2.data();
+        auto capacity = a2.capacity();
         a2 = a1;
         gdt_assert(a2.get_allocator().id == 67);
         gdt_assert(a2.data() == data);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a2.size() == 2);
         gdt_assert(a2[0] == 1);
         gdt_assert(a2[1] == 2);
@@ -210,10 +214,11 @@ consteval int test_consteval()
         const dynarr a1({1, 2}, no_propagate{{.id = 67}});
         dynarr a2({3, 4, 5}, no_propagate{{.id = 89}});
         auto data = a2.data();
+        auto capacity = a2.capacity();
         a2 = a1;
         gdt_assert(a2.get_allocator().id == 89);
         gdt_assert(a2.data() == data);
-        gdt_assert(a2.capacity() == 3);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a2.size() == 2);
         gdt_assert(a2[0] == 1);
         gdt_assert(a2[1] == 2);
@@ -224,11 +229,11 @@ consteval int test_consteval()
         dynarr a1 = {1, 2};
         dynarr a2 = {3, 4, 5};
         auto data = a1.data();
+        auto capacity = a1.capacity();
         a2 = std::move(a1);
-        gdt_assert(a1.data() == nullptr);
+        gdt_assert(a1.data() != data);
         gdt_assert(a2.data() == data);
-        gdt_assert(a1.capacity() == 0);
-        gdt_assert(a2.capacity() == 2);
+        gdt_assert(a2.capacity() == capacity);
         gdt_assert(a1.size() == 0);
         gdt_assert(a2.size() == 2);
     }

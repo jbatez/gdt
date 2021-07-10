@@ -56,7 +56,7 @@ namespace gdt
             return size_type((std::min)({
                 common_t(SIZE_MAX / sizeof(value_type)),
                 common_t(size_max / sizeof(value_type)),
-                common_t(diff_max)
+                common_t(diff_max),
             }));
         }
 

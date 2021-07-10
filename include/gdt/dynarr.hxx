@@ -6,14 +6,52 @@
 #include "assume.hxx"
 #include <algorithm>
 #include <compare>
+#include <cstddef>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <type_traits>
 #include <utility>
 
 namespace gdt_detail
 {
+    // Determine the max number of elements
+    // that could fit in the small variant.
+    template<typename T, typename Allocator>
+    consteval std::size_t dynarr_small_capacity()
+    {
+        using pointer = typename std::allocator_traits<Allocator>::pointer;
+        using size_type = typename std::allocator_traits<Allocator>::size_type;
+        using difference_type = typename std::allocator_traits<Allocator>::difference_type;
+
+        using common_type = std::common_type_t<
+            std::size_t, size_type, std::make_unsigned_t<difference_type>>;
+
+        auto size_max = (std::numeric_limits<size_type>::max)();
+        auto diff_max = (std::numeric_limits<difference_type>::max)();
+
+        if (std::is_same_v<pointer, T*>)
+        {
+            return std::size_t(std::min({
+                common_type(sizeof(T*) / sizeof(T)),
+                common_type(size_max / sizeof(T)),
+                common_type(diff_max),
+            }));
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    // Dynarr storage.
+    template<
+        typename T,
+        typename Allocator,
+        std::size_t SmallCap = dynarr_small_capacity<T, Allocator>()>
+    class dynarr_storage;
+
     // Dynarr iterator.
     template<typename T, typename Allocator>
     class dynarr_iterator;
@@ -54,8 +92,8 @@ namespace gdt
         explicit constexpr dynarr(const Allocator& allocator) noexcept
         :
             _allocator{allocator},
-            _ptr{nullptr},
-            _capacity{0},
+            _storage(_allocator),
+            _capacity{_small_capacity()},
             _size{0}
         {}
 
@@ -106,8 +144,12 @@ namespace gdt
         constexpr dynarr(dynarr&& other) noexcept
         :
             _allocator{std::move(other._allocator)},
-            _ptr{std::exchange(other._ptr, nullptr)},
-            _capacity{std::exchange(other._capacity, 0)},
+            _storage(
+                std::move(other._storage),
+                _allocator,
+                other._capacity,
+                other._size),
+            _capacity{std::exchange(other._capacity, _small_capacity())},
             _size{std::exchange(other._size, 0)}
         {}
 
@@ -320,13 +362,13 @@ namespace gdt
         // Begin.
         constexpr iterator begin() noexcept
         {
-            return iterator(_ptr);
+            return iterator(_storage.ptr(_capacity));
         }
 
         // Begin.
         constexpr const_iterator begin() const noexcept
         {
-            return const_iterator(_ptr);
+            return const_iterator(_storage.ptr(_capacity));
         }
 
         // End.
@@ -444,7 +486,32 @@ namespace gdt
         {
             if (_capacity > _size)
             {
-                _reallocate(_size);
+                if constexpr (_small_capacity() == 0)
+                {
+                    _reallocate(_size);
+                }
+                else if (_size > _small_capacity())
+                {
+                    _reallocate(_size);
+                }
+                else if (_capacity > _small_capacity())
+                {
+                    if (std::is_constant_evaluated())
+                    {
+                        _reallocate(_small_capacity());
+                    }
+                    else
+                    {
+                        auto src = _storage.large;
+                        auto dst = pointer(&_storage.small[0]);
+                        _migrate(iterator(dst), iterator(src), _size);
+
+                        std::allocator_traits<Allocator>::deallocate(
+                            _allocator, src, _capacity);
+
+                        _capacity = _small_capacity();
+                    }
+                }
             }
         }
 
@@ -507,13 +574,13 @@ namespace gdt
         // Data.
         constexpr T* data() noexcept
         {
-            return std::to_address(_ptr);
+            return std::to_address(_storage.ptr(_capacity));
         }
 
         // Data.
         constexpr const T* data() const noexcept
         {
-            return std::to_address(_ptr);
+            return std::to_address(_storage.ptr(_capacity));
         }
 
         // Emplace back.
@@ -665,7 +732,11 @@ namespace gdt
                 gdt_assume(_allocator == other._allocator);
             }
 
-            swap(_ptr, other._ptr);
+            _storage.swap(other._storage,
+                _allocator, other._allocator,
+                _capacity, other._capacity,
+                _size, other._size);
+
             swap(_capacity, other._capacity);
             swap(_size, other._size);
         }
@@ -732,15 +803,23 @@ namespace gdt
     private:
         // Member variables.
         [[no_unique_address]] Allocator _allocator;
-        pointer _ptr;
+        gdt_detail::dynarr_storage<T, Allocator> _storage;
         size_type _capacity;
         size_type _size;
+
+        // Determine the max number of elements
+        // that could fit in the small variant.
+        static constexpr size_type _small_capacity()
+        {
+            return size_type(gdt_detail::dynarr_small_capacity<T, Allocator>());
+        }
 
         // Take ownership of another dynarr's buffer.
         constexpr void _take_buffer(dynarr& other) noexcept
         {
-            _ptr = std::exchange(other._ptr, nullptr);
-            _capacity = std::exchange(other._capacity, 0);
+            _storage.take(
+                other._storage, _allocator, other._capacity, other._size);
+            _capacity = std::exchange(other._capacity, _small_capacity());
             _size = std::exchange(other._size, 0);
         }
 
@@ -824,11 +903,7 @@ namespace gdt
         // Deallocate the current buffer.
         constexpr void _deallocate() noexcept
         {
-            if (_ptr != nullptr)
-            {
-                std::allocator_traits<Allocator>::deallocate(
-                    _allocator, _ptr, _capacity);
-            }
+            _storage.deallocate(_allocator, _capacity);
         }
 
         // Move to a new buffer with the given capacity.
@@ -839,7 +914,7 @@ namespace gdt
             auto new_ptr = _allocate(new_capacity);
             _migrate(iterator(new_ptr), begin(), _size);
             _deallocate();
-            _ptr = new_ptr;
+            _storage.large = new_ptr;
             _capacity = new_capacity;
         }
 
@@ -864,8 +939,8 @@ namespace gdt
         constexpr void _reset() noexcept
         {
             _destroy_all_and_deallocate();
-            _ptr = nullptr;
-            _capacity = 0;
+            _storage.reset(_allocator);
+            _capacity = _small_capacity();
             _size = 0;
         }
 
@@ -1054,7 +1129,7 @@ namespace gdt
 
             // Free the old buffer and use the new one.
             _deallocate();
-            _ptr = new_ptr;
+            _storage.large = new_ptr;
             _capacity = new_capacity;
             _size += 1;
 
@@ -1098,7 +1173,7 @@ namespace gdt
 
             // Free the old buffer and use the new one.
             _deallocate();
-            _ptr = new_ptr;
+            _storage.large = new_ptr;
             _capacity = new_capacity;
             _size = new_size;
 
@@ -1217,6 +1292,308 @@ namespace gdt
 namespace gdt_detail
 {
     using namespace gdt;
+
+    // Dynarr storage (SmallCap > 0).
+    template<typename T, typename Allocator, std::size_t SmallCap>
+    class dynarr_storage
+    {
+    public:
+        // Member types.
+        using pointer = typename std::allocator_traits<Allocator>::pointer;
+        using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
+        using size_type = typename std::allocator_traits<Allocator>::size_type;
+        using difference_type = typename std::allocator_traits<Allocator>::difference_type;
+
+        // Only works with T* for now.
+        // Other pointer types should use SmallCap == 0
+        // to get the other dynarr_storage specialization.
+        static_assert(std::is_same_v<pointer, T*>);
+
+        // Member variables.
+        union
+        {
+            alignas(T) std::byte small[sizeof(T) * SmallCap];
+            pointer large;
+        };
+
+        // Constructor.
+        explicit constexpr dynarr_storage(Allocator& allocator) noexcept
+        {
+            reset(allocator);
+        }
+
+        // Constructor.
+        constexpr dynarr_storage(
+            dynarr_storage&& other,
+            Allocator& allocator,
+            size_type capacity,
+            size_type size)
+        noexcept
+        {
+            take(other, allocator, capacity, size);
+        }
+
+        // Pointer.
+        constexpr pointer ptr(size_type capacity) noexcept
+        {
+            if (std::is_constant_evaluated() || capacity > SmallCap)
+            {
+                return large;
+            }
+            else
+            {
+                gdt_assume(capacity == SmallCap);
+                return pointer(&small[0]);
+            }
+        }
+
+        // Pointer.
+        constexpr const_pointer ptr(size_type capacity) const noexcept
+        {
+            if (std::is_constant_evaluated() || capacity > SmallCap)
+            {
+                return large;
+            }
+            else
+            {
+                gdt_assume(capacity == SmallCap);
+                return const_pointer(&small[0]);
+            }
+        }
+
+        // Take.
+        constexpr void take(
+            dynarr_storage& other,
+            Allocator& allocator,
+            size_type capacity,
+            size_type size)
+        noexcept
+        {
+            if (std::is_constant_evaluated())
+            {
+                large = other.large;
+                other.reset(allocator);
+            }
+            else if (capacity > SmallCap)
+            {
+                large = std::exchange(other.large, nullptr);
+            }
+            else
+            {
+                gdt_assume(capacity == SmallCap);
+
+                pointer dst = pointer(&small[0]);
+                pointer src = pointer(&other.small[0]);
+
+                for (size_type i = 0; i < size; ++i, ++dst, ++src)
+                {
+                    std::allocator_traits<Allocator>::construct(
+                        allocator, dst, std::move(*src));
+                    std::allocator_traits<Allocator>::destroy(
+                        allocator, src);
+                }
+            }
+        }
+
+        // Swap.
+        constexpr void swap(
+            dynarr_storage& other,
+            Allocator& new_allocator,
+            Allocator& other_allocator,
+            size_type old_capacity,
+            size_type other_capacity,
+            size_type old_size,
+            size_type other_size)
+        noexcept
+        {
+            using std::swap;
+
+            if (std::is_constant_evaluated() || 
+                (old_capacity > SmallCap && other_capacity > SmallCap))
+            {
+                swap(large, other.large);
+            }
+            else if (old_capacity > SmallCap)
+            {
+                gdt_assume(other_capacity == SmallCap);
+                auto old_large = large;
+
+                auto dst = pointer(&small[0]);
+                auto src = pointer(&other.small[0]);
+
+                for (size_type i = 0; i < other_size; ++i, ++dst, ++src)
+                {
+                    std::allocator_traits<Allocator>::construct(
+                        new_allocator, dst, std::move(*src));
+                    std::allocator_traits<Allocator>::destroy(
+                        new_allocator, src);
+                }
+
+                other.large = old_large;
+            }
+            else if (other_capacity > SmallCap)
+            {
+                gdt_assume(old_capacity == SmallCap);
+                auto other_large = other.large;
+
+                auto dst = pointer(&other.small[0]);
+                auto src = pointer(&small[0]);
+
+                for (size_type i = 0; i < old_size; ++i, ++dst, ++src)
+                {
+                    std::allocator_traits<Allocator>::construct(
+                        other_allocator, dst, std::move(*src));
+                    std::allocator_traits<Allocator>::destroy(
+                        other_allocator, src);
+                }
+
+                large = other_large;
+            }
+            else
+            {
+                gdt_assume(old_capacity == SmallCap);
+                gdt_assume(other_capacity == SmallCap);
+
+                auto itr = pointer(&small[0]);
+                auto otr = pointer(&other.small[0]);
+
+                auto common_size = std::min(old_size, other_size);
+                for (size_type i = 0; i < common_size; ++i, ++itr, ++otr)
+                {
+                    swap(*itr, *otr);
+                }
+
+                for (auto i = common_size; i < other_size; ++i, ++itr, ++otr)
+                {
+                    std::allocator_traits<Allocator>::construct(
+                        new_allocator, itr, std::move(*otr));
+                    std::allocator_traits<Allocator>::destroy(
+                        new_allocator, otr);
+                }
+
+                for (auto i = common_size; i < old_size; ++i, ++itr, ++otr)
+                {
+                    std::allocator_traits<Allocator>::construct(
+                        other_allocator, otr, std::move(*itr));
+                    std::allocator_traits<Allocator>::destroy(
+                        other_allocator, itr);
+                }
+            }
+        }
+
+        // Deallocate.
+        constexpr void deallocate(
+            Allocator& allocator,
+            size_type capacity)
+        noexcept
+        {
+            if (std::is_constant_evaluated() || capacity > SmallCap)
+            {
+                std::allocator_traits<Allocator>::deallocate(
+                    allocator, large, capacity);
+            }
+            else
+            {
+                gdt_assume(capacity == SmallCap);
+            }
+        }
+
+        // Reset.
+        constexpr void reset(Allocator& allocator) noexcept
+        {
+            if (std::is_constant_evaluated())
+            {
+                large = std::allocator_traits<Allocator>::allocate(
+                    allocator, SmallCap);
+            }
+        }
+    };
+
+    // Dynarr storage (SmallCap == 0).
+    template<typename T, typename Allocator>
+    struct dynarr_storage<T, Allocator, 0>
+    {
+    public:
+        // Member types.
+        using pointer = typename std::allocator_traits<Allocator>::pointer;
+        using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
+        using size_type = typename std::allocator_traits<Allocator>::size_type;
+        using difference_type = typename std::allocator_traits<Allocator>::difference_type;
+
+        // Member variables.
+        pointer large;
+
+        // Constructor.
+        constexpr explicit dynarr_storage(Allocator&) noexcept
+        :
+            large{nullptr}
+        {}
+
+        // Constructor.
+        constexpr dynarr_storage(
+            dynarr_storage&& other,
+            Allocator&,
+            size_type,
+            size_type)
+        noexcept
+        :
+            large{std::exchange(other.large, nullptr)}
+        {}
+
+        // Pointer.
+        constexpr pointer ptr(size_type) noexcept
+        {
+            return large;
+        }
+
+        // Pointer.
+        constexpr const_pointer ptr(size_type) const noexcept
+        {
+            return large;
+        }
+
+        // Take.
+        constexpr void take(
+            dynarr_storage& other,
+            Allocator&,
+            size_type,
+            size_type)
+        noexcept
+        {
+            large = std::exchange(other.large, nullptr);
+        }
+
+        // Swap.
+        constexpr void swap(
+            dynarr_storage& other,
+            Allocator&, Allocator&,
+            size_type, size_type,
+            size_type, size_type)
+        noexcept
+        {
+            using std::swap;
+            swap(large, other.large);
+        }
+
+        // Deallocate.
+        constexpr void deallocate(
+            Allocator& allocator,
+            size_type capacity)
+        noexcept
+        {
+            if (large != nullptr)
+            {
+                std::allocator_traits<Allocator>::deallocate(
+                    allocator, large, capacity);
+            }
+        }
+
+        // Reset.
+        constexpr void reset(Allocator&) noexcept
+        {
+            large = nullptr;
+        }
+    };
 
     // Dynarr iterator.
     template<typename T, typename Allocator>
