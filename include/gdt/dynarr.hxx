@@ -9,6 +9,7 @@
 #include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -611,6 +612,13 @@ namespace gdt
             return _insert(position, il.begin(), il.end());
         }
 
+        // Trivially allocate at position.
+        constexpr iterator alloc(const_iterator position, size_type len)
+        requires std::is_trivially_default_constructible_v<T>
+        {
+            return _alloc(position, len);
+        }
+
         // Erase.
         constexpr iterator erase(const_iterator position)
         {
@@ -1025,6 +1033,30 @@ namespace gdt
             }
         }
 
+        // Trivially allocate at position.
+        constexpr iterator _alloc(const_iterator position, size_type len)
+        requires std::is_trivially_default_constructible_v<T>
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            gdt_assert(len <= max_size() - _size);
+            auto new_size = size_type(_size + len);
+
+            // Allocate in the middle of migration
+            // if reallocation is necessary.
+            if (_capacity < new_size)
+            {
+                auto new_capacity = _choose_new_capacity(new_size);
+                auto new_ptr = _allocate(new_capacity);
+                return _alloc_migrate(
+                    new_ptr, new_capacity, new_size, position, len);
+            }
+
+            // Allocate in the middle of the current buffer otherwise.
+            return _alloc_mid_buffer(new_size, position);
+        }
+
         // Emplace in the middle of migration.
         template<typename... Args>
         constexpr iterator _emplace_migrate(
@@ -1106,6 +1138,49 @@ namespace gdt
             return new_pos;
         }
 
+        // Allocate in the middle of migration.
+        constexpr iterator _alloc_migrate(
+            pointer new_ptr,
+            size_type new_capacity,
+            size_type new_size,
+            const_iterator position,
+            size_type len)
+        noexcept
+        requires std::is_trivially_default_constructible_v<T>
+        {
+            gdt_assume(new_capacity >= new_size);
+            gdt_assume(new_size > _size);
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            // Migrate up to position.
+            auto old_beg = begin();
+            auto new_beg = iterator(new_ptr);
+            auto pos_idx = position - old_beg;
+            _migrate(new_beg, old_beg, size_type(pos_idx));
+
+            // Allocate at position.
+            auto new_pos = new_beg + pos_idx;
+            auto dst = new_pos;
+            for (size_type i = 0; i < len; ++i, ++dst)
+            {
+                new(static_cast<void*>(std::addressof(*dst))) T;
+            }
+
+            // Migrate after position.
+            auto old_pos = old_beg + pos_idx;
+            _migrate(dst, old_pos, (_size - size_type(pos_idx)));
+
+            // Free the old buffer and use the new one.
+            _deallocate();
+            _ptr = new_ptr;
+            _capacity = new_capacity;
+            _size = new_size;
+
+            // Done.
+            return new_pos;
+        }
+
         // Insert in the middle of the current buffer.
         template<typename InputIterator>
         constexpr iterator _insert_mid_buffer(
@@ -1170,6 +1245,49 @@ namespace gdt
                 {
                     _construct(std::addressof(*dst++, *first++));
                 }
+            }
+
+            // Done.
+            _size = new_size;
+            return pos;
+        }
+
+        // Allocate in the middle of the current buffer.
+        constexpr iterator _alloc_mid_buffer(
+            size_type new_size,
+            const_iterator position)
+        noexcept
+        requires std::is_trivially_default_constructible_v<T>
+        {
+            gdt_assume(new_size > _size);
+            gdt_assume(new_size <= _capacity);
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            // Shift all elements from position onward back.
+            auto beg = begin();
+            auto old_end = end();
+
+            auto dst = beg + new_size;
+            auto src = beg + _size;
+            auto pos = position - beg + beg;
+
+            while (dst > old_end && src > pos)
+            {
+                _construct(std::addressof(*--dst), std::move(*--src));
+            }
+
+            while (src > pos)
+            {
+                *--dst = std::move(*--src);
+            }
+
+            // Only use placement new on elements past the end of
+            // the buffer that haven't begun their lifetime yet. Let the
+            // objects inside the old buffer keep their post-move values.
+            while (dst > old_end)
+            {
+                new(static_cast<void*>(std::addressof(*--dst))) T;
             }
 
             // Done.
