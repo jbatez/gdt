@@ -650,6 +650,22 @@ consteval int test_consteval()
 
     // TODO: More.
 
+    // Unordered erase.
+    {
+        dynarr a = {1, 2, 3, 4};
+        a.unordered_erase(a.begin() + 1);
+        gdt_assert(a.size() == 3);
+        gdt_assert(a[0] == 1);
+        gdt_assert(a[1] == 4);
+        gdt_assert(a[2] == 3);
+        a.unordered_erase(a.begin() + 2);
+        gdt_assert(a.size() == 2);
+        gdt_assert(a[0] == 1);
+        gdt_assert(a[1] == 4);
+    }
+
+    // TODO: More.
+
     // Success.
     return 0;
 }

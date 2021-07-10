@@ -619,6 +619,20 @@ namespace gdt
             return _alloc(position, len);
         }
 
+        // Move `back()` into `position` and erase `back()`.
+        constexpr iterator unordered_erase(const_iterator position)
+        {
+            gdt_assume(position >= begin());
+            gdt_assume(position < end());
+
+            auto beg = begin();
+            auto dst = position - beg + beg;
+            auto src = end() - 1;
+            *dst = std::move(*src);
+            _truncate(src);
+            return dst;
+        }
+
         // Erase.
         constexpr iterator erase(const_iterator position)
         {
