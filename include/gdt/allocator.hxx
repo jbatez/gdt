@@ -47,16 +47,16 @@ namespace gdt
         // Max size.
         constexpr size_type max_size() noexcept
         {
-            using common_t = std::common_type_t<
+            using common_type = std::common_type_t<
                 std::size_t, SizeT, std::make_unsigned_t<DiffT>>;
 
             auto size_max = (std::numeric_limits<SizeT>::max)();
             auto diff_max = (std::numeric_limits<DiffT>::max)();
 
             return size_type((std::min)({
-                common_t(SIZE_MAX / sizeof(value_type)),
-                common_t(size_max / sizeof(value_type)),
-                common_t(diff_max)
+                common_type(SIZE_MAX / sizeof(value_type)),
+                common_type(size_max / sizeof(value_type)),
+                common_type(diff_max),
             }));
         }
 
