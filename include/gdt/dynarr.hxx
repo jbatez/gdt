@@ -82,14 +82,15 @@ namespace gdt
         }
 
         // Constructor.
-        template<typename InputIterator>
-        requires std::is_base_of_v<
-            std::input_iterator_tag,
-            typename std::iterator_traits<InputIterator>::iterator_category>
+        template<
+            typename InputIterator>
         constexpr dynarr(
             InputIterator first,
             InputIterator last,
             const Allocator& allocator = Allocator())
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         :
             dynarr(allocator)
         {
@@ -176,7 +177,8 @@ namespace gdt
         }
 
         // Assignment.
-        constexpr dynarr& operator=(dynarr&& other)
+        constexpr dynarr& operator=(
+            dynarr&& other)
         noexcept(
             std::allocator_traits<Allocator>::
                 propagate_on_container_move_assignment::value ||
@@ -220,8 +222,9 @@ namespace gdt
                 }
                 else
                 {
-                    auto move_end = std::move(src_begin, other.end(), begin());
-                    _truncate(move_end);
+                    auto src_end = other.end();
+                    auto dst_end = std::move(src_begin, src_end, begin());
+                    _truncate(dst_end);
                 }
             }
 
@@ -236,13 +239,14 @@ namespace gdt
         }
 
         // Assign.
-        template<typename InputIterator>
-        requires std::is_base_of_v<
-            std::input_iterator_tag,
-            typename std::iterator_traits<InputIterator>::iterator_category>
+        template<
+            typename InputIterator>
         constexpr void assign(
             InputIterator first,
             InputIterator last)
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         {
             if constexpr (std::is_base_of_v<
                 std::forward_iterator_tag,
@@ -466,14 +470,14 @@ namespace gdt
         // At.
         constexpr const_reference at(size_type i) const
         {
-            gdt_assert(i < size());
+            gdt_assert(i < _size);
             return begin()[difference_type(i)];
         }
 
         // At.
         constexpr reference at(size_type i)
         {
-            gdt_assert(i < size());
+            gdt_assert(i < _size);
             return begin()[difference_type(i)];
         }
 
@@ -583,7 +587,7 @@ namespace gdt
             size_type fill_len,
             const T& fill_value)
         {
-            gdt_assert(fill_len <= max_size() - size());
+            gdt_assert(fill_len <= max_size() - _size);
             auto ptr = std::addressof(fill_value);
             return _insert(
                 position,
@@ -592,14 +596,15 @@ namespace gdt
         }
 
         // Insert.
-        template<typename InputIterator>
-        requires std::is_base_of_v<
-            std::input_iterator_tag,
-            typename std::iterator_traits<InputIterator>::iterator_category>
+        template<
+            typename InputIterator>
         constexpr iterator insert(
             const_iterator position,
             InputIterator first,
             InputIterator last)
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         {
             return _insert(position, first, last);
         }
@@ -650,8 +655,8 @@ namespace gdt
             gdt_assume(last <= end());
 
             auto beg = begin();
-            auto first_idx = first - beg;
             auto last_idx = last - beg;
+            auto first_idx = first - beg;
 
             // Shift forward elements after the erase range.
             auto src_begin = beg + last_idx;
@@ -667,7 +672,8 @@ namespace gdt
         }
 
         // Swap.
-        constexpr void swap(dynarr& other)
+        constexpr void swap(
+            dynarr& other)
         noexcept(
             std::allocator_traits<Allocator>::
                 propagate_on_container_swap::value ||
@@ -878,8 +884,8 @@ namespace gdt
             gdt_assume(new_end >= begin());
             gdt_assume(new_end <= end());
 
-            _size = size_type(new_end - begin());
             _destroy(new_end, end());
+            _size = size_type(new_end - begin());
         }
 
         // Reset to the default state.
@@ -934,7 +940,9 @@ namespace gdt
         // Emplace or insert.
         // Set `must_use_ctor = true` for emplace.
         // Set `must_use_ctor = false` for insert.
-        template<bool must_use_ctor, typename... Args>
+        template<
+            bool must_use_ctor,
+            typename... Args>
         constexpr iterator _emplace_or_insert(
             const_iterator position,
             Args&&... args)
@@ -987,7 +995,8 @@ namespace gdt
         }
 
         // Insert multiple.
-        template<typename InputIterator>
+        template<
+            typename InputIterator>
         constexpr iterator _insert(
             const_iterator position,
             InputIterator first,
@@ -1037,8 +1046,7 @@ namespace gdt
             {
                 // We can't determine the new size ahead of time without forward
                 // iterators. The best we can do is insert one at a time.
-                auto beg = begin();
-                auto pos = position - beg + beg;
+                auto pos = position - begin();
                 for (auto dst = pos; first != last; ++first, ++dst)
                 {
                     insert(begin() + dst, *first);
@@ -1071,8 +1079,52 @@ namespace gdt
             return _alloc_mid_buffer(new_size, position);
         }
 
+        // Common code at the beginning of _{emplace,insert,alloc}_migrate.
+        constexpr iterator _insert_migrate_begin(
+            pointer new_ptr,
+            size_type new_capacity,
+            size_type new_size,
+            const_iterator position)
+        {
+            gdt_assume(new_capacity >= new_size);
+            gdt_assume(new_size > _size);
+            gdt_assume(position >= begin());
+            gdt_assume(position <= end());
+
+            auto old_beg = begin();
+            auto new_beg = iterator(new_ptr);
+            auto pos_idx = position - old_beg;
+            _migrate(new_beg, old_beg, size_type(pos_idx));
+
+            return new_beg + pos_idx;
+        }
+
+        // Common code at the end of _{emplace,insert,alloc}_migrate.
+        constexpr iterator _insert_migrate_end(
+            pointer new_ptr,
+            size_type new_capacity,
+            size_type new_size,
+            const_iterator position)
+        {
+            auto old_beg = begin();
+            auto new_beg = iterator(new_ptr);
+            auto pos_idx = position - old_beg;
+            auto old_pos = old_beg + pos_idx;
+            auto new_pos = new_beg + pos_idx;
+            auto dst = new_pos + difference_type(new_size - _size);
+            _migrate(dst, old_pos, (_size - size_type(pos_idx)));
+
+            _deallocate();
+            _ptr = new_ptr;
+            _capacity = new_capacity;
+            _size = new_size;
+
+            return new_pos;
+        }
+
         // Emplace in the middle of migration.
-        template<typename... Args>
+        template<
+            typename... Args>
         constexpr iterator _emplace_migrate(
             pointer new_ptr,
             size_type new_capacity,
@@ -1080,76 +1132,38 @@ namespace gdt
             Args&&... args)
         noexcept
         {
-            gdt_assume(new_capacity > _size);
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
+            auto new_size = size_type(_size + 1);
+            auto dst = _insert_migrate_begin(
+                new_ptr, new_capacity, new_size, position);
 
-            // Migrate up to position.
-            auto old_beg = begin();
-            auto new_beg = iterator(new_ptr);
-            auto pos_idx = position - old_beg;
-            _migrate(new_beg, old_beg, size_type(pos_idx));
+            _construct(std::addressof(*dst), std::forward<Args>(args)...);
 
-            // Emplace at position.
-            auto new_pos = new_beg + pos_idx;
-            _construct(std::addressof(*new_pos), std::forward<Args>(args)...);
-
-            // Migrate after position.
-            auto old_pos = old_beg + pos_idx;
-            _migrate(new_pos + 1, old_pos, (_size - size_type(pos_idx)));
-
-            // Free the old buffer and use the new one.
-            _deallocate();
-            _ptr = new_ptr;
-            _capacity = new_capacity;
-            _size += 1;
-
-            // Done.
-            return new_pos;
+            return _insert_migrate_end(
+                new_ptr, new_capacity, new_size, position);
         }
 
         // Insert in the middle of migration.
-        template<typename ForwardIterator>
+        template<
+            typename ForwardIterator>
         constexpr iterator _insert_migrate(
             pointer new_ptr,
             size_type new_capacity,
             size_type new_size,
             const_iterator position,
-            ForwardIterator& first,
-            ForwardIterator& last)
+            ForwardIterator first,
+            ForwardIterator last)
         noexcept
         {
-            gdt_assume(new_capacity >= new_size);
-            gdt_assume(new_size > _size);
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
+            auto dst = _insert_migrate_begin(
+                new_ptr, new_capacity, new_size, position);
 
-            // Migrate up to position.
-            auto old_beg = begin();
-            auto new_beg = iterator(new_ptr);
-            auto pos_idx = position - old_beg;
-            _migrate(new_beg, old_beg, size_type(pos_idx));
-
-            // Emplace at position.
-            auto new_pos = new_beg + pos_idx;
-            auto dst = new_pos;
             for (; first != last; ++first, ++dst)
             {
                 _construct(std::addressof(*dst), *first);
             }
 
-            // Migrate after position.
-            auto old_pos = old_beg + pos_idx;
-            _migrate(dst, old_pos, (_size - size_type(pos_idx)));
-
-            // Free the old buffer and use the new one.
-            _deallocate();
-            _ptr = new_ptr;
-            _capacity = new_capacity;
-            _size = new_size;
-
-            // Done.
-            return new_pos;
+            return _insert_migrate_end(
+                new_ptr, new_capacity, new_size, position);
         }
 
         // Allocate in the middle of migration.
@@ -1162,46 +1176,22 @@ namespace gdt
         noexcept
         requires std::is_trivially_default_constructible_v<T>
         {
-            gdt_assume(new_capacity >= new_size);
-            gdt_assume(new_size > _size);
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
+            auto dst = _insert_migrate_begin(
+                new_ptr, new_capacity, new_size, position);
 
-            // Migrate up to position.
-            auto old_beg = begin();
-            auto new_beg = iterator(new_ptr);
-            auto pos_idx = position - old_beg;
-            _migrate(new_beg, old_beg, size_type(pos_idx));
-
-            // Allocate at position.
-            auto new_pos = new_beg + pos_idx;
-            auto dst = new_pos;
             for (size_type i = 0; i < len; ++i, ++dst)
             {
                 new(static_cast<void*>(std::addressof(*dst))) T;
             }
 
-            // Migrate after position.
-            auto old_pos = old_beg + pos_idx;
-            _migrate(dst, old_pos, (_size - size_type(pos_idx)));
-
-            // Free the old buffer and use the new one.
-            _deallocate();
-            _ptr = new_ptr;
-            _capacity = new_capacity;
-            _size = new_size;
-
-            // Done.
-            return new_pos;
+            return _insert_migrate_end(
+                new_ptr, new_capacity, new_size, position);
         }
 
-        // Insert in the middle of the current buffer.
-        template<typename InputIterator>
-        constexpr iterator _insert_mid_buffer(
+        // Common code at the beginning of _{emplace,insert,alloc}_mid_buffer.
+        constexpr std::pair<iterator, iterator> _insert_mid_buffer_begin(
             size_type new_size,
-            const_iterator position,
-            InputIterator first,
-            InputIterator last)
+            const_iterator position)
         noexcept
         {
             gdt_assume(new_size > _size);
@@ -1211,12 +1201,11 @@ namespace gdt
 
             // Shift all elements from position onward back.
             auto beg = begin();
-            auto old_end = end();
-
             auto dst = beg + new_size;
             auto src = beg + _size;
             auto pos = position - beg + beg;
 
+            auto old_end = end();
             while (dst > old_end && src > pos)
             {
                 _construct(std::addressof(*--dst), std::move(*--src));
@@ -1226,6 +1215,23 @@ namespace gdt
             {
                 *--dst = std::move(*--src);
             }
+
+            // Done.
+            return {dst, pos};
+        }
+
+        // Insert in the middle of the current buffer.
+        template<
+            typename InputIterator>
+        constexpr iterator _insert_mid_buffer(
+            size_type new_size,
+            const_iterator position,
+            InputIterator first,
+            InputIterator last)
+        noexcept
+        {
+            auto [dst, pos] = _insert_mid_buffer_begin(new_size, position);
+            auto old_end = end();
 
             // Insert from back to front if possible
             // to match above shift memory access pattern.
@@ -1273,32 +1279,12 @@ namespace gdt
         noexcept
         requires std::is_trivially_default_constructible_v<T>
         {
-            gdt_assume(new_size > _size);
-            gdt_assume(new_size <= _capacity);
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
-
-            // Shift all elements from position onward back.
-            auto beg = begin();
+            auto [dst, pos] = _insert_mid_buffer_begin(new_size, position);
             auto old_end = end();
 
-            auto dst = beg + new_size;
-            auto src = beg + _size;
-            auto pos = position - beg + beg;
-
-            while (dst > old_end && src > pos)
-            {
-                _construct(std::addressof(*--dst), std::move(*--src));
-            }
-
-            while (src > pos)
-            {
-                *--dst = std::move(*--src);
-            }
-
             // Only use placement new on elements past the end of
-            // the buffer that haven't begun their lifetime yet. Let the
-            // objects inside the old buffer keep their post-move values.
+            // the buffer that haven't begun their lifetime yet. Let
+            // the objects inside the old buffer keep their lifetimes.
             while (dst > old_end)
             {
                 new(static_cast<void*>(std::addressof(*--dst))) T;
@@ -1433,7 +1419,7 @@ namespace gdt_detail
         friend constexpr typename dynarr<T, Allocator>::difference_type
         operator-(const dynarr_iterator& lhs, const dynarr_iterator& rhs)
         {
-            return _da_diff(lhs._ptr - rhs._ptr);
+            return _itr_diff(lhs._ptr - rhs._ptr);
         }
 
         // Addition assignment.
@@ -1478,7 +1464,7 @@ namespace gdt_detail
         // Member types.
         using _pointer = typename dynarr<T, Allocator>::pointer;
         using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
-        using _dynarr_diff = typename dynarr<T, Allocator>::difference_type;
+        using _iterator_diff = typename dynarr<T, Allocator>::difference_type;
 
         // Member variables.
         _pointer _ptr;
@@ -1489,18 +1475,18 @@ namespace gdt_detail
             _ptr{ptr}
         {}
 
-        // Pointer diff from dynarr diff.
-        static constexpr _pointer_diff _ptr_diff(_dynarr_diff d)
+        // Pointer diff from iterator diff.
+        static constexpr _pointer_diff _ptr_diff(_iterator_diff d)
         {
             auto ret = _pointer_diff(d);
             gdt_assume(ret == d);
             return ret;
         }
 
-        // Dynarr diff from pointer diff.
-        static constexpr _dynarr_diff _da_diff(_pointer_diff d)
+        // Iterator diff from pointer diff.
+        static constexpr _iterator_diff _itr_diff(_pointer_diff d)
         {
-            auto ret = _dynarr_diff(d);
+            auto ret = _iterator_diff(d);
             gdt_assume(ret == d);
             return ret;
         }
@@ -1598,7 +1584,7 @@ namespace gdt_detail
             const dynarr_const_iterator& lhs,
             const dynarr_const_iterator& rhs)
         {
-            return _da_diff(lhs._ptr - rhs._ptr);
+            return _itr_diff(lhs._ptr - rhs._ptr);
         }
 
         // Addition assignment.
@@ -1642,7 +1628,7 @@ namespace gdt_detail
         // Member types.
         using _pointer = typename dynarr<T, Allocator>::const_pointer;
         using _pointer_diff = typename std::iterator_traits<_pointer>::difference_type;
-        using _dynarr_diff = typename dynarr<T, Allocator>::difference_type;
+        using _iterator_diff = typename dynarr<T, Allocator>::difference_type;
 
         // Member variables.
         _pointer _ptr;
@@ -1653,18 +1639,18 @@ namespace gdt_detail
             _ptr{ptr}
         {}
 
-        // Pointer diff from dynarr diff.
-        static constexpr _pointer_diff _ptr_diff(_dynarr_diff d)
+        // Pointer diff from iterator diff.
+        static constexpr _pointer_diff _ptr_diff(_iterator_diff d)
         {
             auto ret = _pointer_diff(d);
             gdt_assume(ret == d);
             return ret;
         }
 
-        // Dynarr diff from pointer diff.
-        static constexpr _dynarr_diff _da_diff(_pointer_diff d)
+        // Iterator diff from pointer diff.
+        static constexpr _iterator_diff _itr_diff(_pointer_diff d)
         {
-            auto ret = _dynarr_diff(d);
+            auto ret = _iterator_diff(d);
             gdt_assume(ret == d);
             return ret;
         }

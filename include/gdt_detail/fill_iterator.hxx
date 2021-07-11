@@ -17,26 +17,26 @@ namespace gdt_detail
         // Constructor.
         constexpr fill_iterator(const T* ptr, DiffT iteration)
         :
-            _ptr{ptr},
+            _value_ptr{ptr},
             _iteration{iteration}
         {}
 
         // Dereference.
         constexpr const T& operator*() const
         {
-            return *_ptr;
+            return *_value_ptr;
         }
 
         // Member access.
         constexpr const T* operator->() const
         {
-            return _ptr;
+            return _value_ptr;
         }
 
         // Subscript.
         constexpr const T& operator[](DiffT) const
         {
-            return *_ptr;
+            return *_value_ptr;
         }
 
         // Pre-increment.
@@ -56,13 +56,13 @@ namespace gdt_detail
         // Post-increment.
         constexpr fill_iterator operator++(int)
         {
-            return {_ptr, _iteration++};
+            return {_value_ptr, _iteration++};
         }
 
         // Post-decrement.
         constexpr fill_iterator operator--(int)
         {
-            return {_ptr, _iteration--};
+            return {_value_ptr, _iteration--};
         }
 
         // Addition.
@@ -70,7 +70,7 @@ namespace gdt_detail
             const fill_iterator& lhs,
             DiffT rhs)
         {
-            return {lhs._ptr, lhs._iteration + rhs};
+            return {lhs._value_ptr, lhs._iteration + rhs};
         }
 
         // Addition.
@@ -78,7 +78,7 @@ namespace gdt_detail
             DiffT lhs,
             const fill_iterator& rhs)
         {
-            return {rhs._ptr, lhs + rhs._iteration};
+            return {rhs._value_ptr, lhs + rhs._iteration};
         }
 
         // Subtraction.
@@ -86,7 +86,7 @@ namespace gdt_detail
             const fill_iterator& lhs,
             DiffT rhs)
         {
-            return {lhs._ptr, lhs._iteration + rhs};
+            return {lhs._value_ptr, lhs._iteration + rhs};
         }
 
         // Subtraction.
@@ -94,7 +94,7 @@ namespace gdt_detail
             const fill_iterator& lhs,
             const fill_iterator& rhs)
         {
-            gdt_assume(lhs._ptr == rhs._ptr);
+            gdt_assume(lhs._value_ptr == rhs._value_ptr);
             return lhs._iteration - rhs._iteration;
         }
 
@@ -121,7 +121,7 @@ namespace gdt_detail
             const fill_iterator& lhs,
             const fill_iterator& rhs)
         {
-            gdt_assume(lhs._ptr == rhs._ptr);
+            gdt_assume(lhs._value_ptr == rhs._value_ptr);
             return lhs._iteration == rhs._iteration;
         }
 
@@ -130,13 +130,13 @@ namespace gdt_detail
             const fill_iterator& lhs,
             const fill_iterator& rhs)
         {
-            gdt_assume(lhs._ptr == rhs._ptr);
+            gdt_assume(lhs._value_ptr == rhs._value_ptr);
             return lhs._iteration <=> rhs._iteration;
         }
 
     private:
         // Member variables.
-        const T* _ptr;
+        const T* _value_ptr;
         DiffT _iteration;
     };
 }

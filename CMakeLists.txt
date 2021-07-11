@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.15) # For CMP0092
 
 project(gdt CXX)
 include(CTest)
@@ -17,8 +17,8 @@ if(BUILD_TESTING)
   list(APPEND test_names vec)
 
   set(test_sources ${test_names})
-  list(TRANSFORM test_sources PREPEND test/)
   list(TRANSFORM test_sources APPEND .cxx)
+  list(TRANSFORM test_sources PREPEND test/)
   create_test_sourcelist(test_sources test_driver.cxx ${test_sources})
 
   add_executable(test_driver ${test_sources})
