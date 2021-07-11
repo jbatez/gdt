@@ -89,13 +89,13 @@ namespace gdt
         // Constructor.
         template<
             typename InputIterator>
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         constexpr dynarr(
             InputIterator first,
             InputIterator last,
             const Allocator& allocator = Allocator())
-        requires std::is_base_of_v<
-            std::input_iterator_tag,
-            typename std::iterator_traits<InputIterator>::iterator_category>
         :
             dynarr(allocator)
         {
@@ -246,12 +246,12 @@ namespace gdt
         // Assign.
         template<
             typename InputIterator>
-        constexpr void assign(
-            InputIterator first,
-            InputIterator last)
         requires std::is_base_of_v<
             std::input_iterator_tag,
             typename std::iterator_traits<InputIterator>::iterator_category>
+        constexpr void assign(
+            InputIterator first,
+            InputIterator last)
         {
             if constexpr (std::is_base_of_v<
                 std::forward_iterator_tag,
@@ -603,13 +603,13 @@ namespace gdt
         // Insert.
         template<
             typename InputIterator>
+        requires std::is_base_of_v<
+            std::input_iterator_tag,
+            typename std::iterator_traits<InputIterator>::iterator_category>
         constexpr iterator insert(
             const_iterator position,
             InputIterator first,
             InputIterator last)
-        requires std::is_base_of_v<
-            std::input_iterator_tag,
-            typename std::iterator_traits<InputIterator>::iterator_category>
         {
             return _insert(position, first, last);
         }
@@ -1062,7 +1062,6 @@ namespace gdt
 
         // Trivially allocate at position.
         constexpr iterator _alloc(const_iterator position, size_type len)
-        requires std::is_trivially_default_constructible_v<T>
         {
             gdt_assume(position >= begin());
             gdt_assume(position <= end());
@@ -1179,7 +1178,6 @@ namespace gdt
             const_iterator position,
             size_type len)
         noexcept
-        requires std::is_trivially_default_constructible_v<T>
         {
             auto dst = _insert_migrate_begin(
                 new_ptr, new_capacity, new_size, position);
@@ -1282,7 +1280,6 @@ namespace gdt
             size_type new_size,
             const_iterator position)
         noexcept
-        requires std::is_trivially_default_constructible_v<T>
         {
             auto [dst, pos] = _insert_mid_buffer_begin(new_size, position);
             auto old_end = end();

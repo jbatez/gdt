@@ -7,6 +7,7 @@
 
 #include <gdt/assume.hxx>
 #include <cstddef>
+#include <type_traits>
 
 namespace gdt
 {
@@ -15,14 +16,44 @@ namespace gdt
     template<typename T> using vec2 = vec<T, 2>;
     template<typename T> using vec3 = vec<T, 3>;
     template<typename T> using vec4 = vec<T, 4>;
+}
 
+namespace gdt_detail
+{
+    using namespace gdt;
+
+    // Is vector.
+    template<typename T>
+    struct is_vec : std::false_type {};
+
+    template<typename T, std::size_t N>
+    struct is_vec<vec<T, N>> : std::true_type {};
+
+    template<typename T>
+    constexpr bool is_vec_v = is_vec<T>::value;
+}
+
+namespace gdt
+{
     // Vector.
     template<typename T, std::size_t N>
     struct vec
     {
+        // Disallow vectors of vectors.
+        static_assert(!gdt_detail::is_vec_v<T>);
+
     public:
         // Constructor.
         constexpr vec() = default;
+
+        // Constructor.
+        explicit constexpr vec(const T& s)
+        {
+            for (std::size_t i = 0; i < N; ++i)
+            {
+                _data[i] = s;
+            }
+        }
 
         // Constructor.
         constexpr vec(const T& x, const T& y)
@@ -126,6 +157,7 @@ namespace gdt
             return _data[i];
         }
 
+        // Individual component accessors.
         #define gdt(i, I)\
         constexpr T& i() requires (N > I)\
         {\
@@ -145,6 +177,7 @@ namespace gdt
         gdt(a, 3)
         #undef gdt
 
+        // 2-component getters.
         #define gdt_1(i, j)\
         constexpr vec2<T> i##j() const\
         {\
@@ -172,6 +205,7 @@ namespace gdt
         #undef gdt_2
         #undef gdt_1
 
+        // 3-component getters.
         #define gdt_1(i, j, k)\
         constexpr vec3<T> i##j##k() const\
         {\
@@ -211,6 +245,7 @@ namespace gdt
         #undef gdt_2
         #undef gdt_1
 
+        // 4-component getters.
         #define gdt_1(i, j, k, l)\
         constexpr vec4<T> i##j##k##l() const \
         {\
@@ -262,6 +297,233 @@ namespace gdt
         #undef gdt_2
         #undef gdt_1
 
+        // 2-component setters.
+        #define gdt(i, j)\
+        constexpr void set_##i##j(const vec2<T>& v)\
+        {\
+            i() = v[0];\
+            j() = v[1];\
+        }
+        gdt(x, y)
+        gdt(x, z)
+        gdt(x, w)
+        gdt(y, x)
+        gdt(y, z)
+        gdt(y, w)
+        gdt(z, x)
+        gdt(z, y)
+        gdt(z, w)
+        gdt(w, x)
+        gdt(w, y)
+        gdt(w, z)
+        gdt(r, g)
+        gdt(r, b)
+        gdt(r, a)
+        gdt(g, r)
+        gdt(g, b)
+        gdt(g, a)
+        gdt(b, r)
+        gdt(b, g)
+        gdt(b, a)
+        gdt(a, r)
+        gdt(a, g)
+        gdt(a, b)
+        #undef gdt
+
+        // 3-component setters.
+        #define gdt(i, j, k)\
+        constexpr void set_##i##j##k(const vec3<T>& v)\
+        {\
+            i() = v[0];\
+            j() = v[1];\
+            k() = v[2];\
+        }
+        gdt(x, y, z)
+        gdt(x, y, w)
+        gdt(x, z, y)
+        gdt(x, z, w)
+        gdt(x, w, y)
+        gdt(x, w, z)
+        gdt(y, x, z)
+        gdt(y, x, w)
+        gdt(y, z, x)
+        gdt(y, z, w)
+        gdt(y, w, x)
+        gdt(y, w, z)
+        gdt(z, x, y)
+        gdt(z, x, w)
+        gdt(z, y, x)
+        gdt(z, y, w)
+        gdt(z, w, x)
+        gdt(z, w, y)
+        gdt(w, x, y)
+        gdt(w, x, z)
+        gdt(w, y, x)
+        gdt(w, y, z)
+        gdt(w, z, x)
+        gdt(w, z, y)
+        gdt(r, g, b)
+        gdt(r, g, a)
+        gdt(r, b, g)
+        gdt(r, b, a)
+        gdt(r, a, g)
+        gdt(r, a, b)
+        gdt(g, r, b)
+        gdt(g, r, a)
+        gdt(g, b, r)
+        gdt(g, b, a)
+        gdt(g, a, r)
+        gdt(g, a, b)
+        gdt(b, r, g)
+        gdt(b, r, a)
+        gdt(b, g, r)
+        gdt(b, g, a)
+        gdt(b, a, r)
+        gdt(b, a, g)
+        gdt(a, r, g)
+        gdt(a, r, b)
+        gdt(a, g, r)
+        gdt(a, g, b)
+        gdt(a, b, r)
+        gdt(a, b, g)
+        #undef gdt
+
+        // 4-component setters.
+        #define gdt(i, j, k, l)\
+        constexpr void set_##i##j##k##l(const vec4<T>& v)\
+        {\
+            i() = v[0];\
+            j() = v[1];\
+            k() = v[2];\
+            l() = v[3];\
+        }
+        gdt(x, y, z, w)
+        gdt(x, y, w, z)
+        gdt(x, z, y, w)
+        gdt(x, z, w, y)
+        gdt(x, w, y, z)
+        gdt(x, w, z, y)
+        gdt(y, x, z, w)
+        gdt(y, x, w, z)
+        gdt(y, z, x, w)
+        gdt(y, z, w, x)
+        gdt(y, w, x, z)
+        gdt(y, w, z, x)
+        gdt(z, x, y, w)
+        gdt(z, x, w, y)
+        gdt(z, y, x, w)
+        gdt(z, y, w, x)
+        gdt(z, w, x, y)
+        gdt(z, w, y, x)
+        gdt(w, x, y, z)
+        gdt(w, x, z, y)
+        gdt(w, y, x, z)
+        gdt(w, y, z, x)
+        gdt(w, z, x, y)
+        gdt(w, z, y, x)
+        gdt(r, g, b, a)
+        gdt(r, g, a, b)
+        gdt(r, b, g, a)
+        gdt(r, b, a, g)
+        gdt(r, a, g, b)
+        gdt(r, a, b, g)
+        gdt(g, r, b, a)
+        gdt(g, r, a, b)
+        gdt(g, b, r, a)
+        gdt(g, b, a, r)
+        gdt(g, a, r, b)
+        gdt(g, a, b, r)
+        gdt(b, r, g, a)
+        gdt(b, r, a, g)
+        gdt(b, g, r, a)
+        gdt(b, g, a, r)
+        gdt(b, a, r, g)
+        gdt(b, a, g, r)
+        gdt(a, r, g, b)
+        gdt(a, r, b, g)
+        gdt(a, g, r, b)
+        gdt(a, g, b, r)
+        gdt(a, b, r, g)
+        gdt(a, b, g, r)
+        #undef gdt
+
+        // Unary operators.
+        #define gdt(op)\
+        friend constexpr auto operator op(const vec& v)\
+        {\
+            vec<decltype(op v[0]), N> ret;\
+            for (std::size_t i = 0; i < N; ++i)\
+            {\
+                ret[i] = op v[i];\
+            }\
+            return ret;\
+        }
+        gdt(+)
+        gdt(-)
+        gdt(~)
+        gdt(!)
+        #undef gdt
+
+        // Vector-scalar and scalar-vector binary operators.
+        #define gdt(op)\
+        template<typename U> requires (!gdt_detail::is_vec_v<U>)\
+        friend constexpr auto operator op(const vec& lhs, const U& rhs)\
+        {\
+            vec<decltype(lhs[0] op rhs), N> ret;\
+            for (std::size_t i = 0; i < N; ++i)\
+            {\
+                ret[i] = lhs[i] op rhs;\
+            }\
+            return ret;\
+        }\
+        template<typename U> requires (!gdt_detail::is_vec_v<U>)\
+        friend constexpr auto operator op(const U& lhs, const vec& rhs)\
+        {\
+            vec<decltype(lhs op rhs[0]), N> ret;\
+            for (std::size_t i = 0; i < N; ++i)\
+            {\
+                ret[i] = lhs op rhs[i];\
+            }\
+            return ret;\
+        }
+        gdt(+)
+        gdt(-)
+        gdt(*)
+        gdt(/)
+        gdt(%)
+        #undef gdt
+
+        // Vector-vector binary operators.
+        #define gdt(op)\
+        template<typename U>\
+        friend constexpr auto operator op(const vec& lhs, const vec<U, N>& rhs)\
+        {\
+            vec<decltype(lhs[0] op rhs[0]), N> ret;\
+            for (std::size_t i = 0; i < N; ++i)\
+            {\
+                ret[i] = lhs[i] op rhs[i];\
+            }\
+            return ret;\
+        }
+        gdt(+)
+        gdt(-)
+        gdt(*)
+        gdt(/)
+        gdt(%)
+        gdt(&)
+        gdt(|)
+        gdt(^)
+        gdt(<<)
+        gdt(>>)
+        gdt(<)
+        gdt(>)
+        gdt(<=)
+        gdt(>=)
+        gdt(==)
+        gdt(!=)
+        gdt(<=>)
+        #undef gdt
+
     private:
         // Member variables.
         T _data[N];
@@ -298,6 +560,10 @@ namespace gdt
     // Deduction guide.
     template<typename T>
     vec(const vec2<T>&, const T&, const T&) -> vec<T, 4>;
+
+    // Deduction guide.
+    template<typename T>
+    vec(const vec2<T>&, const vec2<T>&) -> vec<T, 4>;
 
     // Deduction guide.
     template<typename T>

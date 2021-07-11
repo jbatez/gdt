@@ -13,7 +13,7 @@ consteval int test_consteval()
 {
     vec v1 = {1, 2};
     vec v2 = {v1, 3};
-    vec v3 = gdt::vec4<int>{v1, v1};
+    vec v3 = {v1, v1};
 
     // Success.
     return 0;
