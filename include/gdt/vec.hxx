@@ -6,7 +6,9 @@
 #pragma once
 
 #include <gdt/assume.hxx>
+#include <cmath>
 #include <cstddef>
+#include <memory>
 #include <type_traits>
 
 namespace gdt
@@ -572,4 +574,161 @@ namespace gdt
     // Deduction guide.
     template<typename T>
     vec(const vec3<T>&, const T&) -> vec<T, 4>;
+
+    // Unary math functions.
+    #define gdt(func)\
+    using std::func;\
+    template<typename T, std::size_t N>\
+    constexpr auto func(const vec<T, N>& v)\
+    {\
+        vec<decltype(func(v[0])), N> ret;\
+        for (std::size_t i = 0; i < N; ++i)\
+        {\
+            ret[i] = func(v[i]);\
+        }\
+        return ret;\
+    }
+    gdt(acos)
+    gdt(asin)
+    gdt(atan)
+    gdt(cos)
+    gdt(sin)
+    gdt(tan)
+    gdt(acosh)
+    gdt(asinh)
+    gdt(atanh)
+    gdt(cosh)
+    gdt(sinh)
+    gdt(tanh)
+    gdt(exp)
+    gdt(exp2)
+    gdt(expm1)
+    gdt(ilogb)
+    gdt(log)
+    gdt(log10)
+    gdt(log1p)
+    gdt(log2)
+    gdt(logb)
+    gdt(cbrt)
+    gdt(abs)
+    gdt(fabs)
+    gdt(sqrt)
+    gdt(erf)
+    gdt(erfc)
+    gdt(lgamma)
+    gdt(tgamma)
+    gdt(ceil)
+    gdt(floor)
+    gdt(nearbyint)
+    gdt(rint)
+    gdt(lrint)
+    gdt(llrint)
+    gdt(round)
+    gdt(lround)
+    gdt(llround)
+    gdt(trunc)
+    gdt(nan)
+    gdt(nanf)
+    gdt(nanl)
+    gdt(fpclassify)
+    gdt(isfinite)
+    gdt(isinf)
+    gdt(isnan)
+    gdt(isnormal)
+    gdt(signbit)
+    #undef gdt
+
+    // Unary math functions with out params.
+    #define gdt(func)\
+    using std::func;\
+    template<typename T, typename U, std::size_t N>\
+    constexpr auto func(const vec<T, N>& v, vec<U, N>* p)\
+    {\
+        gdt_assume(p != nullptr);\
+        vec<decltype(func(v[0], std::addressof((*p)[0]))), N> ret;\
+        for (std::size_t i = 0; i < N; ++i)\
+        {\
+            ret[i] = func(v[i], std::addressof((*p)[i]));\
+        }\
+        return ret;\
+    }
+    gdt(frexp)
+    gdt(modf)
+    #undef gdt
+
+    // Binary math functions.
+    #define gdt(func)\
+    using std::func;\
+    template<typename T, typename U, std::size_t N>\
+    constexpr auto func(const vec<T, N>& v1, const vec<U, N>& v2)\
+    {\
+        vec<decltype(func(v1[0], v2[0])), N> ret;\
+        for (std::size_t i = 0; i < N; ++i)\
+        {\
+            ret[i] = func(v1[i], v2[i]);\
+        }\
+        return ret;\
+    }
+    gdt(atan2)
+    gdt(ldexp)
+    gdt(scalbn)
+    gdt(scalbln)
+    gdt(hypot)
+    gdt(pow)
+    gdt(fmod)
+    gdt(remainder)
+    gdt(copysign)
+    gdt(nextafter)
+    gdt(nexttoward)
+    gdt(fdim)
+    gdt(fmax)
+    gdt(fmin)
+    gdt(isgreater)
+    gdt(isgreaterequal)
+    gdt(isless)
+    gdt(islessequal)
+    gdt(islessgreater)
+    gdt(isunordered)
+    #undef gdt
+
+    // Binary math functions with out params.
+    #define gdt(func)\
+    using std::func;\
+    template<typename T, typename U, typename V, std::size_t N>\
+    constexpr auto func(\
+        const vec<T, N>& v1,\
+        const vec<U, N>& v2,\
+        vec<V, N>* p)\
+    {\
+        gdt_assume(p != nullptr);\
+        vec<decltype(func(v1[0], v2[0], std::addressof((*p)[0]))), N> ret;\
+        for (std::size_t i = 0; i < N; ++i)\
+        {\
+            ret[i] = func(v1[i], v2[i], std::addressof((*p)[i]));\
+        }\
+        return ret;\
+    }
+    gdt(remquo)
+    #undef gdt
+
+    // Ternary math functions.
+    #define gdt(func)\
+    using std::func;\
+    template<typename T, typename U, typename V, std::size_t N>\
+    constexpr auto func(\
+        const vec<T, N>& v1,\
+        const vec<U, N>& v2,\
+        const vec<V, N>& v3)\
+    {\
+        vec<decltype(func(v1[0], v2[0], v3[0])), N> ret;\
+        for (std::size_t i = 0; i < N; ++i)\
+        {\
+            ret[i] = func(v1[i], v2[i], v3[i]);\
+        }\
+        return ret;\
+    }
+    gdt(hypot)
+    gdt(fma)
+    gdt(lerp)
+    #undef gdt
 }
