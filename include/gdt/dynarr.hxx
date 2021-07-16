@@ -50,6 +50,16 @@ namespace gdt
         using reverse_iterator = std::reverse_iterator<iterator>;
         using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
+    private:
+        // Member variables.
+        // GCC gets a little confused if these are down
+        // after the public section for some reason.
+        [[no_unique_address]] Allocator _allocator;
+        pointer _ptr;
+        size_type _capacity;
+        size_type _size;
+
+    public:
         // Constructor.
         constexpr dynarr() noexcept(noexcept(Allocator()))
         :
@@ -763,12 +773,6 @@ namespace gdt
         }
 
     private:
-        // Member variables.
-        [[no_unique_address]] Allocator _allocator;
-        pointer _ptr;
-        size_type _capacity;
-        size_type _size;
-
         // Take ownership of another dynarr's buffer.
         constexpr void _take_buffer(dynarr& other) noexcept
         {

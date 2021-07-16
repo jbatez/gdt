@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <gdt/assume.hxx>
+#include "assume.hxx"
 #include <cmath>
 #include <cstddef>
 #include <memory>
