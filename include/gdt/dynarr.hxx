@@ -632,27 +632,6 @@ namespace gdt
             return _insert(position, il.begin(), il.end());
         }
 
-        // Trivially allocate at position.
-        constexpr iterator alloc(const_iterator position, size_type len)
-        requires std::is_trivially_default_constructible_v<T>
-        {
-            return _alloc(position, len);
-        }
-
-        // Move `back()` into `position` and erase `back()`.
-        constexpr iterator unordered_erase(const_iterator position)
-        {
-            gdt_assume(position >= begin());
-            gdt_assume(position < end());
-
-            auto beg = begin();
-            auto dst = position - beg + beg;
-            auto src = end() - 1;
-            *dst = std::move(*src);
-            _truncate(src);
-            return dst;
-        }
-
         // Erase.
         constexpr iterator erase(const_iterator position)
         {
@@ -1064,30 +1043,7 @@ namespace gdt
             }
         }
 
-        // Trivially allocate at position.
-        constexpr iterator _alloc(const_iterator position, size_type len)
-        {
-            gdt_assume(position >= begin());
-            gdt_assume(position <= end());
-
-            gdt_assert(len <= max_size() - _size);
-            auto new_size = size_type(_size + len);
-
-            // Allocate in the middle of migration
-            // if reallocation is necessary.
-            if (_capacity < new_size)
-            {
-                auto new_capacity = _choose_new_capacity(new_size);
-                auto new_ptr = _allocate(new_capacity);
-                return _alloc_migrate(
-                    new_ptr, new_capacity, new_size, position, len);
-            }
-
-            // Allocate in the middle of the current buffer otherwise.
-            return _alloc_mid_buffer(new_size, position);
-        }
-
-        // Common code at the beginning of _{emplace,insert,alloc}_migrate.
+        // Common code at the beginning of _{emplace,insert}_migrate.
         constexpr iterator _insert_migrate_begin(
             pointer new_ptr,
             size_type new_capacity,
@@ -1107,7 +1063,7 @@ namespace gdt
             return new_beg + pos_idx;
         }
 
-        // Common code at the end of _{emplace,insert,alloc}_migrate.
+        // Common code at the end of _{emplace,insert}_migrate.
         constexpr iterator _insert_migrate_end(
             pointer new_ptr,
             size_type new_capacity,
@@ -1174,31 +1130,14 @@ namespace gdt
                 new_ptr, new_capacity, new_size, position);
         }
 
-        // Allocate in the middle of migration.
-        constexpr iterator _alloc_migrate(
-            pointer new_ptr,
-            size_type new_capacity,
+        // Insert in the middle of the current buffer.
+        template<
+            typename InputIterator>
+        constexpr iterator _insert_mid_buffer(
             size_type new_size,
             const_iterator position,
-            size_type len)
-        noexcept
-        {
-            auto dst = _insert_migrate_begin(
-                new_ptr, new_capacity, new_size, position);
-
-            for (size_type i = 0; i < len; ++i, ++dst)
-            {
-                new(static_cast<void*>(std::addressof(*dst))) T;
-            }
-
-            return _insert_migrate_end(
-                new_ptr, new_capacity, new_size, position);
-        }
-
-        // Common code at the beginning of _{emplace,insert,alloc}_mid_buffer.
-        constexpr std::pair<iterator, iterator> _insert_mid_buffer_begin(
-            size_type new_size,
-            const_iterator position)
+            InputIterator first,
+            InputIterator last)
         noexcept
         {
             gdt_assume(new_size > _size);
@@ -1222,23 +1161,6 @@ namespace gdt
             {
                 *--dst = std::move(*--src);
             }
-
-            // Done.
-            return {dst, pos};
-        }
-
-        // Insert in the middle of the current buffer.
-        template<
-            typename InputIterator>
-        constexpr iterator _insert_mid_buffer(
-            size_type new_size,
-            const_iterator position,
-            InputIterator first,
-            InputIterator last)
-        noexcept
-        {
-            auto [dst, pos] = _insert_mid_buffer_begin(new_size, position);
-            auto old_end = end();
 
             // Insert from back to front if possible
             // to match above shift memory access pattern.
@@ -1272,28 +1194,6 @@ namespace gdt
                 {
                     _construct(std::addressof(*dst++, *first++));
                 }
-            }
-
-            // Done.
-            _size = new_size;
-            return pos;
-        }
-
-        // Allocate in the middle of the current buffer.
-        constexpr iterator _alloc_mid_buffer(
-            size_type new_size,
-            const_iterator position)
-        noexcept
-        {
-            auto [dst, pos] = _insert_mid_buffer_begin(new_size, position);
-            auto old_end = end();
-
-            // Only use placement new on elements past the end of
-            // the buffer that haven't begun their lifetime yet. Let
-            // the objects inside the old buffer keep their lifetimes.
-            while (dst > old_end)
-            {
-                new(static_cast<void*>(std::addressof(*--dst))) T;
             }
 
             // Done.

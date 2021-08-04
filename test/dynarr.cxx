@@ -655,22 +655,6 @@ consteval int test_consteval()
 
     // TODO: More.
 
-    // Unordered erase.
-    {
-        dynarr a = {1, 2, 3, 4};
-        a.unordered_erase(a.begin() + 1);
-        gdt_assert(a.size() == 3);
-        gdt_assert(a[0] == 1);
-        gdt_assert(a[1] == 4);
-        gdt_assert(a[2] == 3);
-        a.unordered_erase(a.begin() + 2);
-        gdt_assert(a.size() == 2);
-        gdt_assert(a[0] == 1);
-        gdt_assert(a[1] == 4);
-    }
-
-    // TODO: More.
-
     // Success.
     return 0;
 }
@@ -679,40 +663,6 @@ int test_dynarr(int, char** const)
 {
     // Consteval.
     gdt_assert(test_consteval() == 0);
-
-    // Allocate.
-    {
-        dynarr<int> a = {1, 2, 3, 4};
-        auto pos = a.alloc(a.begin() + 2, 12);
-        gdt_assert(pos == a.begin() + 2);
-        gdt_assert(a.capacity() == 16);
-        gdt_assert(a.size() == 16);
-        gdt_assert(a[0] == 1);
-        gdt_assert(a[1] == 2);
-        gdt_assert(a[14] == 3);
-        gdt_assert(a[15] == 4);
-
-        a.reserve(34);
-        auto data = a.data();
-        for (int i = 0; i < 16; ++i)
-        {
-            data[i] = i;
-        }
-
-        pos = a.alloc(a.begin() + 5, 6);
-        gdt_assert(pos == a.begin() + 5);
-        gdt_assert(a.data() == data);
-        gdt_assert(a.capacity() == 34);
-        gdt_assert(a.size() == 16 + 6);
-        for (int i = 0; i < 5 + 6; ++i)
-        {
-            gdt_assert(data[i] == i);
-        }
-        for (int i = 5 + 6; i < 16 + 6; ++i)
-        {
-            gdt_assert(data[i] == i - 6);
-        }
-    }
 
     // Success.
     return 0;
