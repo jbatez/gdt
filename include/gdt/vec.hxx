@@ -575,6 +575,30 @@ namespace gdt
     template<typename T>
     vec(const vec3<T>&, const T&) -> vec<T, 4>;
 
+    // Any component true.
+    template<std::size_t N>
+    constexpr bool any(const vec<bool, N>& v)
+    {
+        bool ret = false;
+        for (std::size_t i = 0; i < N; i++)
+        {
+            ret |= v[i];
+        }
+        return ret;
+    }
+
+    // All components true.
+    template<std::size_t N>
+    constexpr bool all(const vec<bool, N>& v)
+    {
+        bool ret = true;
+        for (std::size_t i = 0; i < N; i++)
+        {
+            ret &= v[i];
+        }
+        return ret;
+    }
+
     // Unary math functions.
     #define gdt(func)\
     using std::func;\
