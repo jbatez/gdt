@@ -28,8 +28,9 @@ there.
 
 GDT uses several C++20 features. It's been tested with:
 
-- VS 2019 v16.10 on Windows
+- MSVC 19.29 on Windows
 - Clang 12 on macOS
+- GCC 10.3 on Linux
 
 ## Usage
 
