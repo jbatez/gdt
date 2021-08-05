@@ -17,7 +17,7 @@ consteval int test_consteval()
 {
     // Scalar constructor.
     {
-        auto v = vec3<int>(123);
+        vec3<int> v(123);
         gdt_assert(v.x() == 123);
         gdt_assert(v.y() == 123);
         gdt_assert(v.z() == 123);
@@ -41,7 +41,7 @@ consteval int test_consteval()
 
     // Conversion/truncation constructor.
     {
-        auto v = vec3<int>(vec4<float>(1.1f, 2.2f, 3.3f, 4.4f));
+        vec3<int> v(vec4<float>(1.1f, 2.2f, 3.3f, 4.4f));
         gdt_assert(v.x() == 1);
         gdt_assert(v.y() == 2);
         gdt_assert(v.z() == 3);

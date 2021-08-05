@@ -28,7 +28,7 @@ there.
 
 GDT several C++20 features. It's been tested with
 
-- VS 2019 16.10 on Windows
+- VS 2019 v16.10 on Windows
 - Clang 12 on macOS
 
 ## Usage
@@ -45,7 +45,7 @@ about to exit.
 
 A simple implementation might look like:
 
-```
+```c++
 #include <gdt/panic.hxx>
 
 #include <cstdio>
@@ -64,17 +64,17 @@ A simple implementation might look like:
 A more-complicated game might choose to integrate `gdt::panic` with some kind of
 bug reporting tool.
 
-## `<gdt/panic.hxx>`
+## <gdt/panic.hxx>
 
-```
+```c++
 #define gdt_panic() (::gdt::panic(__FILE__, __LINE__, "gdt_panic()"))
 ```
 
 A macro to call `gdt::panic` with the current file name and line number.
 
-## `<gdt/assert.hxx>`
+## <gdt/assert.hxx>
 
-```
+```c++
 #define gdt_assert(x) static_cast<void>(\
     (x) || (::gdt::panic(__FILE__, __LINE__, "gdt_assert("#x") failed"), 0))
 ```
@@ -83,9 +83,9 @@ Panic if the given condition is false. Unlike `<cassert>`/`<assert.h>`, the
 condition is always checked regardless of the `NDEBUG` macro. For something
 more like `<cassert>`/`<assert.h>`, consider using `<gdt/assume.hxx>`.
 
-## `<gdt/assume.hxx>`
+## <gdt/assume.hxx>
 
-```
+```c++
 #ifndef NDEBUG
 #define gdt_assume(x) static_cast<void>(\
     (x) || (::gdt::panic(__FILE__, __LINE__, "gdt_assume("#x") failed"), 0))
@@ -102,9 +102,9 @@ In debug builds (`NDEBUG` is not defined), panics if the given condition is
 false. In release builds (`NDEBUG` is defined), provides a hint that the given
 condition is always true so the compiler can optimize around the assumption.
 
-## `<gdt/unreachable.hxx>`
+## <gdt/unreachable.hxx>
 
-```
+```c++
 #ifndef NDEBUG
 #define gdt_unreachable() (\
     ::gdt::panic(__FILE__, __LINE__, "gdt_unreachable() reached"))
@@ -119,9 +119,9 @@ In debug builds (`NDEBUG` is not defined), panics if control flow reaches it.
 In release builds (`NDEBUG` is defined), provides a hint that control flow
 never reaches it so the compiler can optimize around the assumption.
 
-## `<gdt/allocator.hxx>`
+## <gdt/allocator.hxx>
 
-```
+```c++
 namespace gdt
 {
     // Allocator.
@@ -148,9 +148,9 @@ containers allow allocators where `size_type` can't represent all non-negative
 values of `difference_type`, meaning `size_type = uint32_t` and
 `different_type = ptrdiff_t` where `ptrdiff_t` is 64-bit is perfectly fine.
 
-## `<gdt/dynarr.hxx>`
+## <gdt/dynarr.hxx>
 
-```
+```c++
 namespace gdt
 {
     // Dynamic array.
@@ -172,9 +172,9 @@ in-place and calls `std::terminate` if the constructor throws an exception.
 around special member functions on the value type, but most types that implement 
 idiomatic copy and/or move semantics should work just fine.
 
-## `<gdt/vec.hxx>`
+## <gdt/vec.hxx>
 
-```
+```c++
 namespace gdt
 {
     // Vector.
@@ -189,14 +189,14 @@ An arithmetic vector.
 
 Vectors can be trivially default-constructed:
 
-```
+```c++
 vec3<float> v;
 ```
 
 Constructed with a scalar copied to each component:
 
-```
-auto v = vec3<int>(123);
+```c++
+vec3<int> v(123);
 gdt_assert(v.x() == 123);
 gdt_assert(v.y() == 123);
 gdt_assert(v.z() == 123);
@@ -204,7 +204,7 @@ gdt_assert(v.z() == 123);
 
 Constructed with a specific value for each component:
 
-```
+```c++
 vec v = {1, 2, 3};
 gdt_assert(v.x() == 1);
 gdt_assert(v.y() == 2);
@@ -213,7 +213,7 @@ gdt_assert(v.z() == 3);
 
 Constructed from smaller vectors:
 
-```
+```c++
 vec v = {1, vec(2, 3)};
 gdt_assert(v.x() == 1);
 gdt_assert(v.y() == 2);
@@ -222,16 +222,16 @@ gdt_assert(v.z() == 3);
 
 Or by converting and/or truncating the components from another vector:
 
-```
-auto v = vec3<int>(vec4<float>(1.1f, 2.2f, 3.3f, 4.4f));
+```c++
+vec3<int> v(vec4<float>(1.1f, 2.2f, 3.3f, 4.4f));
 gdt_assert(v.x() == 1);
 gdt_assert(v.y() == 2);
 gdt_assert(v.z() == 3);
 ```
 
-Components can be accessed by index, by xyzw name, or by rgba name:
+Components can be accessed by index, by `xyzw`, or by `rgba`:
 
-```
+```c++
 vec4<float> v;
 gdt_assert(&v.x() == &v[0]);
 gdt_assert(&v.y() == &v[1]);
@@ -245,7 +245,7 @@ gdt_assert(&v.a() == &v[3]);
 
 Component swizzling is supported as well:
 
-```
+```c++
 vec v = {1, 2, 3};
 gdt_assert(all(v.xy() == vec(1, 2)));
 gdt_assert(all(v.yx() == vec(2, 1)));
@@ -258,7 +258,7 @@ gdt_assert(v.x() == 5);
 
 Operators are component-wise, including comparison operators:
 
-```
+```c++
 gdt_assert(all(-vec(1, 2, 3) == vec(-1, -2, -3)));
 gdt_assert(all(1 + vec(2, 3) == vec(3, 4)));
 gdt_assert(all((vec(1, 1) & vec(1, 0)) == vec(1, 0)));
@@ -266,16 +266,16 @@ gdt_assert(all((vec(1, 1) & vec(1, 0)) == vec(1, 0)));
 
 To collapse boolean vectors, use the `gdt::any` and `gdt::all` functions:
 
-```
+```c++
 gdt_assert(any(vec(1, 2) != vec(1, 3)));
 gdt_assert(all(vec(1, 2) == vec(1, 2)));
 ```
 
 Most math functions from `<cmath>` work on vectors as well, except you
-either need to use the `gdt::` namespace versions of use 
+either need to use the `gdt::` namespace versions or use 
 argument-dependent lookup:
 
-```
+```c++
 auto s = gdt::sin(vec(1.2f, 3.4f));
 gdt_assert(s.x() == gdt::sin(1.2f));
 gdt_assert(s.y() == gdt::sin(3.4f));
