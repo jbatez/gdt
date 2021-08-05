@@ -26,7 +26,7 @@ there.
 
 ## Requirements
 
-GDT several C++20 features. It's been tested with
+GDT uses several C++20 features. It's been tested with:
 
 - VS 2019 v16.10 on Windows
 - Clang 12 on macOS
@@ -146,7 +146,7 @@ for example, override `SizeT` with `uint32_t` to make `gdt::dynarr` use a 32-bit
 size and capacity on a 64-bit system. Note: unlike the Standard Library, GDT
 containers allow allocators where `size_type` can't represent all non-negative
 values of `difference_type`, meaning `size_type = uint32_t` and
-`different_type = ptrdiff_t` where `ptrdiff_t` is 64-bit is perfectly fine.
+`difference_type = ptrdiff_t` where `ptrdiff_t` is 64-bit is perfectly fine.
 
 ## <gdt/dynarr.hxx>
 
@@ -168,9 +168,9 @@ new object outside the vector's buffer, then move-assigns it into the buffer
 for exception safety reasons, but `gdt::dynarr` just constructs the new object
 in-place and calls `std::terminate` if the constructor throws an exception.
 
-`gdt::dynarr` might have some slightly different requirements than `std::vector`
-around special member functions on the value type, but most types that implement 
-idiomatic copy and/or move semantics should work just fine.
+`gdt::dynarr` might have some slightly different requirements around special
+member functions on the value type, but most types that implement idiomatic copy
+and/or move semantics should work just fine.
 
 ## <gdt/vec.hxx>
 
