@@ -14,7 +14,7 @@
     const char* message)
 {
     std::fprintf(stderr, "%s:%u: %s\n", file, line, message);
-    std::exit(EXIT_FAILURE);
+    std::_Exit(EXIT_FAILURE);
 }
 
 int test_panic(int, char** const)

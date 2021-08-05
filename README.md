@@ -58,7 +58,7 @@ A simple implementation might look like:
     const char* message)
 {
     std::fprintf(stderr, "%s:%u: %s\n", file, line, message);
-    std::exit(EXIT_FAILURE);
+    std::_Exit(EXIT_FAILURE);
 }
 ```
 
